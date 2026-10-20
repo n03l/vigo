@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta http-equiv="Content-Security-Policy"
+          content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+    <meta name="color-scheme" content="dark">
+    <meta name="theme-color" content="#0d1015">
+    <title>vigo</title>
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+    <link rel="icon" href="icons/favicon-32.png" sizes="32x32" type="image/png">
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+    <link rel="stylesheet" href="app.css">
+    <script type="module" src="app.js"></script>
+</head>
+<body>
+    <header class="bar">
+        <a class="brand" href="#/">
+            <svg class="brand-mark" viewBox="0 0 64 64" width="26" height="26" aria-hidden="true" focusable="false"><path d="M9 12 L31 52 H37 V36 H46 V24 H55 V12" fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span>vigo</span>
+        </a>
+        <nav class="tabs" aria-label="Pages">
+            <a href="#/" data-tab="ride"><span class="tab-icon" aria-hidden="true">▶</span>Ride</a>
+            <a href="#/workouts" data-tab="workouts"><span class="tab-icon" aria-hidden="true">≡</span>Workouts</a>
+            <a href="#/history" data-tab="history"><span class="tab-icon" aria-hidden="true">◷</span>History</a>
+            <a href="#/settings" data-tab="settings"><span class="tab-icon" aria-hidden="true">⚙</span>Settings</a>
+        </nav>
+        <nav class="devices" aria-label="Sensors">
+            <button type="button" class="device" id="dev-trainer" data-status="disconnected" data-label="Trainer">
+                <span class="dot" aria-hidden="true"></span>
+                <span class="device-label">Trainer</span>
+                <span class="device-name"></span>
+            </button>
+            <button type="button" class="device" id="dev-hr" data-status="disconnected" data-label="Heart rate">
+                <span class="dot" aria-hidden="true"></span>
+                <span class="device-label"><span class="wide">Heart rate</span><span class="narrow">HR</span></span>
+                <span class="device-name"></span>
+            </button>
+            <button type="button" class="device" id="dev-csc" data-status="disconnected" data-label="Speed/cadence">
+                <span class="dot" aria-hidden="true"></span>
+                <span class="device-label"><span class="wide">Speed/</span>Cadence</span>
+                <span class="device-name"></span>
+            </button>
+        </nav>
+        <div class="repo">
+            <a class="repo-link" href="https://github.com/n03l/vigo" target="_blank" rel="noopener noreferrer" aria-label="vigo on GitHub">
+                <svg class="github-mark" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><path fill="currentColor" d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg>
+            </a>
+            <a id="version" class="repo-link version" href="https://github.com/n03l/vigo" target="_blank" rel="noopener noreferrer">dev</a>
+        </div>
+    </header>
+
+    <main>
+        <div id="banners" class="banners" aria-live="polite"></div>
+
+        <div class="view view-ride" data-view="ride">
+            <section class="tiles" aria-label="Live data">
+                <div class="tile tile-power">
+                    <span class="tile-label">Power <small>3s</small></span>
+                    <span class="tile-value" id="v-power">--</span>
+                    <span class="tile-unit">W</span>
+                </div>
+                <div class="tile tile-target" id="tile-target">
+                    <span class="tile-label">Target</span>
+                    <span class="tile-value" id="v-target">--</span>
+                    <span class="tile-unit" id="v-target-note">W</span>
+                </div>
+                <div class="tile tile-hr">
+                    <span class="tile-label">Heart rate</span>
+                    <span class="tile-value" id="v-hr">--</span>
+                    <span class="tile-unit">bpm</span>
+                </div>
+                <div class="tile tile-cadence">
+                    <span class="tile-label">Cadence</span>
+                    <span class="tile-value" id="v-cadence">--</span>
+                    <span class="tile-unit" id="v-speed">rpm</span>
+                </div>
+                <div class="tile tile-interval" id="tile-interval">
+                    <span class="tile-label">Interval</span>
+                    <span class="tile-value" id="v-interval">--:--</span>
+                    <span class="tile-unit" id="v-next">&nbsp;</span>
+                </div>
+                <div class="tile tile-elapsed">
+                    <span class="tile-label">Elapsed</span>
+                    <span class="tile-value" id="v-elapsed">0:00</span>
+                    <span class="tile-unit" id="v-remaining">&nbsp;</span>
+                </div>
+            </section>
+
+            <section class="workout-bar" aria-label="Selected workout">
+                <div class="workout-info">
+                    <p id="workout-name" class="workout-name"></p>
+                    <p id="workout-meta" class="workout-meta"></p>
+                </div>
+                <a class="button-link" href="#/workouts">Change</a>
+            </section>
+
+            <section class="chart" aria-label="Workout">
+                <div id="chart" class="chart-box"></div>
+                <p id="chart-empty" class="chart-empty">Pick a workout to start.</p>
+            </section>
+
+            <section class="controls" aria-label="Workout controls">
+                <button type="button" id="btn-start" class="primary" disabled>Start</button>
+                <button type="button" id="btn-skip" disabled>Skip interval</button>
+                <div class="bias" role="group" aria-label="Intensity">
+                    <button type="button" id="bias-down" aria-label="Easier by 5 percent">&minus;</button>
+                    <span id="bias" class="bias-value">100%</span>
+                    <button type="button" id="bias-up" aria-label="Harder by 5 percent">+</button>
+                </div>
+                <button type="button" id="btn-end" class="danger" disabled>End</button>
+            </section>
+        </div>
+
+        <section class="view page" data-view="workouts" aria-labelledby="h-workouts" hidden>
+            <div class="page-head">
+                <h1 id="h-workouts" tabindex="-1">Workouts</h1>
+                <label class="upload">
+                    Upload .erg/.mrc
+                    <input id="file" class="visually-hidden" type="file" accept=".erg,.mrc,text/plain">
+                </label>
+            </div>
+            <p id="setup-error" class="error" role="alert"></p>
+            <ul id="workout-list" class="list workout-list" aria-label="Workout library"></ul>
+        </section>
+
+        <section class="view page" data-view="history" aria-labelledby="h-history" hidden>
+            <div class="page-head">
+                <h1 id="h-history" tabindex="-1">History</h1>
+            </div>
+            <p id="history-empty" class="empty">No rides yet</p>
+            <ul id="history-list" class="list history-list"></ul>
+        </section>
+
+        <section class="view page" data-view="settings" aria-labelledby="h-settings" hidden>
+            <div class="page-head">
+                <h1 id="h-settings" tabindex="-1">Settings</h1>
+            </div>
+            <div class="card devices-card" id="devices-card">
+                <h2 class="card-title">Devices</h2>
+                <p id="device-mode" class="hint"></p>
+                <ul id="device-list" class="list device-list"></ul>
+                <label class="check">
+                    <input id="auto-connect" type="checkbox">
+                    <span>Connect automatically when vigo opens</span>
+                </label>
+            </div>
+            <div class="card settings">
+                <h2 class="card-title">Ride</h2>
+                <label class="field">
+                    <span>FTP (W)</span>
+                    <input id="ftp" type="number" inputmode="numeric" min="50" max="600" step="1" required>
+                    <small class="hint">Workouts in % of FTP are scaled to this.</small>
+                </label>
+                <label class="field">
+                    <span>Tyre size</span>
+                    <select id="wheel"></select>
+                    <small class="hint">Used for speed and distance from the speed sensor.</small>
+                </label>
+                <label class="check">
+                    <input id="sound" type="checkbox" aria-describedby="sound-hint">
+                    <span>Sounds</span>
+                </label>
+                <p class="hint" id="sound-hint">Beeps 5 seconds before each interval, a chime at the end, an alarm if the trainer drops.</p>
+                <p id="settings-error" class="error" role="alert"></p>
+            </div>
+        </section>
+    </main>
+
+    <dialog id="summary" class="summary" aria-labelledby="summary-title">
+        <h2 id="summary-title">Ride done</h2>
+        <p id="summary-name" class="workout-name"></p>
+        <dl id="summary-stats" class="stats"></dl>
+        <p id="summary-saved" class="workout-meta"></p>
+        <p id="summary-error" class="error" role="alert"></p>
+        <div class="dialog-actions" id="ending-actions">
+            <button type="button" id="btn-save" class="primary">Save ride</button>
+            <button type="button" id="btn-keep">Keep riding</button>
+            <button type="button" id="btn-discard" class="danger">Discard ride</button>
+        </div>
+        <div class="dialog-actions" id="done-actions">
+            <button type="button" id="btn-download" class="primary">Download .FIT</button>
+            <button type="button" id="btn-close">Close</button>
+        </div>
+    </dialog>
+</body>
+</html>
