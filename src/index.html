@@ -92,6 +92,7 @@
             <section class="workout-bar" aria-label="Selected workout">
                 <div class="workout-info">
                     <p id="workout-name" class="workout-name"></p>
+                    <p id="workout-description" class="workout-description"></p>
                     <p id="workout-meta" class="workout-meta"></p>
                 </div>
                 <a class="button-link" href="#/workouts">Change</a>
@@ -100,6 +101,12 @@
             <section class="chart" aria-label="Workout">
                 <div id="chart" class="chart-box"></div>
                 <p id="chart-empty" class="chart-empty">Pick a workout to start.</p>
+                <p id="cue-text" class="cue-text" aria-live="polite" hidden></p>
+                <p id="chart-legend" class="chart-legend" aria-hidden="true">
+                    <span class="legend-power" data-line="power" hidden>Power</span>
+                    <span class="legend-hr" data-line="heartRate" hidden>Heart rate</span>
+                    <span class="legend-cadence" data-line="cadence" hidden>Cadence</span>
+                </p>
             </section>
 
             <section class="controls" aria-label="Workout controls">
@@ -165,6 +172,38 @@
                 </label>
                 <p class="hint" id="sound-hint">Beeps 5 seconds before each interval, a chime at the end, an alarm if the trainer drops.</p>
                 <p id="settings-error" class="error" role="alert"></p>
+            </div>
+            <div class="card settings">
+                <h2 class="card-title">Heart rate zones</h2>
+                <label class="field">
+                    <span>Max heart rate (bpm)</span>
+                    <input id="max-hr" type="number" inputmode="numeric" min="100" max="230" step="1" required>
+                    <small class="hint">Sets the zones to 50, 60, 70, 80 and 90% of it. Fine tune each zone below.</small>
+                </label>
+                <div class="zone-grid">
+                <label class="field zone-field">
+                    <span><i class="swatch hr-swatch-1" aria-hidden="true"></i>Zone 1 from (bpm)</span>
+                    <input id="hr-z1" type="number" inputmode="numeric" min="40" max="230" step="1" required>
+                </label>
+                <label class="field zone-field">
+                    <span><i class="swatch hr-swatch-2" aria-hidden="true"></i>Zone 2 from (bpm)</span>
+                    <input id="hr-z2" type="number" inputmode="numeric" min="40" max="230" step="1" required>
+                </label>
+                <label class="field zone-field">
+                    <span><i class="swatch hr-swatch-3" aria-hidden="true"></i>Zone 3 from (bpm)</span>
+                    <input id="hr-z3" type="number" inputmode="numeric" min="40" max="230" step="1" required>
+                </label>
+                <label class="field zone-field">
+                    <span><i class="swatch hr-swatch-4" aria-hidden="true"></i>Zone 4 from (bpm)</span>
+                    <input id="hr-z4" type="number" inputmode="numeric" min="40" max="230" step="1" required>
+                </label>
+                <label class="field zone-field">
+                    <span><i class="swatch hr-swatch-5" aria-hidden="true"></i>Zone 5 from (bpm)</span>
+                    <input id="hr-z5" type="number" inputmode="numeric" min="40" max="230" step="1" required>
+                </label>
+                </div>
+                <p class="hint">The heart rate on the ride screen takes the colour of its zone.</p>
+                <p id="hr-error" class="error" role="alert"></p>
             </div>
         </section>
     </main>

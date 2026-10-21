@@ -1,5 +1,5 @@
 //
-// Interval cues: when to count down and beep
+// Interval cues: when to count down and beep, and which text message to show
 //
 // A cue is a segment start where the power jumps, by at least 5% of FTP. Ramps and point by point
 // files are many segments that continue each other, a beep at every one of them would be noise.
@@ -48,4 +48,16 @@ export function cueAt(times, second) {
     if(next === undefined) return undefined;
     if(next <= second) return 'go';
     return next - second <= countdown ? 'count' : undefined;
+}
+
+// ([{start, duration, text}], Number) -> String | undefined, the text message on screen at t
+//
+// the latest one to start wins when they overlap
+export function textAt(texts, t) {
+    let shown;
+    for(const text of texts) {
+        if(text.start > t) break;
+        if(t < text.start + text.duration) shown = text.text;
+    }
+    return shown;
 }

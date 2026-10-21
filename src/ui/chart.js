@@ -2,6 +2,7 @@
 // Workout profile chart
 //
 // The SVG viewBox is in workout units, x in seconds and y in watts, stretched to the box.
+// Heart rate and cadence share a fixed 0-220 scale of their own, so power keeps its axis.
 // Colours come from CSS classes so the page needs no inline styles.
 //
 
@@ -16,6 +17,8 @@ function svg(tag, attributes = {}) {
 }
 
 const fmt = (x) => (Math.round(x * 10) / 10).toString();
+
+const sensorMax = 220; // bpm and rpm at the top of the chart
 
 // (Workout, {ftp, scale, height}) -> [SVGPolygonElement], one per segment in zone colours
 // drawn as ridden: scaled by the intensity setting and capped like the targets
@@ -48,21 +51,27 @@ export function drawProfile(workout, ftp) {
     return root;
 }
 
-export function WorkoutChart(container) {
+// (Element, Element) -> Chart, the legend lists only the lines that have points
+export function WorkoutChart(container, legend) {
     const root = svg('svg', {class: 'chart-svg', preserveAspectRatio: 'none', role: 'img'});
     const profile = svg('g', {class: 'profile'});
     const ftpLine = svg('line', {class: 'ftp-line', 'vector-effect': 'non-scaling-stroke'});
-    const trace = svg('polyline', {class: 'power-trace', 'vector-effect': 'non-scaling-stroke', points: ''});
     const done = svg('rect', {class: 'done', x: 0, y: 0, width: 0, height: 0});
     const cursor = svg('line', {class: 'cursor', 'vector-effect': 'non-scaling-stroke'});
-    root.append(profile, done, ftpLine, trace, cursor);
+    const trace = (name) => svg('polyline', {class: `${name}-trace`, 'vector-effect': 'non-scaling-stroke', points: ''});
+    // [key, polyline, value -> y in chart units]
+    const traces = [
+        ['power', trace('power'), (w) => w],
+        ['heartRate', trace('hr'), (bpm) => bpm / sensorMax * height],
+        ['cadence', trace('cadence'), (rpm) => rpm / sensorMax * height],
+    ].map(([key, line, scale]) => ({key, line, scale, points: []}));
+    root.append(profile, done, ftpLine, ...traces.map((tr) => tr.line).reverse(), cursor);
     container.replaceChildren(root);
 
     let height = 1;
     let duration = 1;
-    let points = [];
 
-    const y = (watts) => fmt(height - Math.min(Math.max(watts, 0), height));
+    const y = (value) => fmt(height - Math.min(Math.max(value, 0), height));
 
     // (Workout, {ftp, bias}) -> Void
     function draw(workout, {ftp, bias = 0}) {
@@ -86,11 +95,12 @@ export function WorkoutChart(container) {
         done.setAttribute('height', height);
         cursor.setAttribute('y1', 0);
         cursor.setAttribute('y2', height);
-        renderTrace();
+        for(const tr of traces) renderTrace(tr);
     }
 
-    function renderTrace() {
-        trace.setAttribute('points', points.map(([t, w]) => `${t},${y(w)}`).join(' '));
+    function renderTrace(tr) {
+        tr.line.setAttribute('points', tr.points.map(([t, v]) => `${t},${y(tr.scale(v))}`).join(' '));
+        if(legend) legend.querySelector(`[data-line="${tr.key}"]`).hidden = tr.points.length === 0;
     }
 
     // Number -> Void
@@ -101,17 +111,26 @@ export function WorkoutChart(container) {
         cursor.setAttribute('x2', x);
     }
 
-    // (Number, Number) -> Void
-    function addPower(t, watts) {
-        if(!Number.isFinite(watts)) return;
-        points.push([t, watts]);
-        trace.setAttribute('points', `${trace.getAttribute('points')} ${t},${y(watts)}`.trim());
+    // (Number, {power, heartRate, cadence}) -> Void, missing values leave a line as it is
+    function addSample(t, values) {
+        for(const tr of traces) {
+            const v = values[tr.key];
+            if(!Number.isFinite(v)) continue;
+            tr.points.push([t, v]);
+            if(tr.points.length === 1) {
+                renderTrace(tr);
+                continue;
+            }
+            tr.line.setAttribute('points', `${tr.line.getAttribute('points')} ${t},${y(tr.scale(v))}`);
+        }
     }
 
-    function clearPower() {
-        points = [];
-        renderTrace();
+    function clearTraces() {
+        for(const tr of traces) {
+            tr.points = [];
+            renderTrace(tr);
+        }
     }
 
-    return Object.freeze({draw, progress, addPower, clearPower});
+    return Object.freeze({draw, progress, addSample, clearTraces});
 }

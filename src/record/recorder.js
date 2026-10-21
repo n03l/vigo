@@ -9,17 +9,56 @@ const storageKey = 'vigo.ride';
 const saveEvery = 10; // samples
 const maxSamples = 24 * 3600;
 
-const finiteOrNull = (x) => (typeof x === 'number' && Number.isFinite(x) ? x : null);
+const maxLaps = 2000;
+const deviceKinds = ['trainer', 'hr', 'csc'];
 
+const finiteOrNull = (x) => (typeof x === 'number' && Number.isFinite(x) ? x : null);
+const cleanName = (x, max) => (typeof x === 'string' ? x.replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ').trim().slice(0, max) : '');
+
+// Any -> [Int] | null, five heart rate zone bounds going up
+function zonesOrNull(zones) {
+    if(!Array.isArray(zones) || zones.length !== 5) return null;
+    const ok = zones.every((z, i) => Number.isInteger(z) && z > 0 && z < 256 && (i === 0 || z > zones[i - 1]));
+    return ok ? [...zones] : null;
+}
+
+// Any -> [{kind, name}]
+function cleanDevices(devices) {
+    if(!Array.isArray(devices)) return [];
+    return devices
+        .filter((d) => deviceKinds.includes(d?.kind))
+        .slice(0, deviceKinds.length)
+        .map((d) => ({kind: d.kind, name: cleanName(d.name, 40)}));
+}
+
+function emptyRide() {
+    return {samples: [], events: [], laps: [], workoutName: '', ftp: null, maxHr: null, hrZones: null, devices: []};
+}
+
+// Ride {samples, events, laps: [t] (interval starts), workoutName, ftp, maxHr, hrZones, devices: [{kind, name}]}
 export function Recorder({storage = globalThis.localStorage} = {}) {
-    let ride = {samples: [], events: [], workoutName: '', ftp: null};
+    let ride = emptyRide();
     let distance = 0;
     let unsaved = 0;
 
-    function start({t, workoutName = '', ftp = null}) {
-        ride = {samples: [], events: [{t, type: 'start'}], workoutName: String(workoutName), ftp: finiteOrNull(ftp)};
+    function start({t, workoutName = '', ftp = null, maxHr = null, hrZones = null, devices = []}) {
+        ride = {
+            ...emptyRide(),
+            events: [{t, type: 'start'}],
+            workoutName: String(workoutName),
+            ftp: finiteOrNull(ftp),
+            maxHr: finiteOrNull(maxHr),
+            hrZones: zonesOrNull(hrZones),
+            devices: cleanDevices(devices),
+        };
         distance = 0;
         save();
+    }
+
+    // Number -> Void, a new interval starts at t
+    function lap(t) {
+        if(ride.laps.length >= maxLaps || ride.laps.at(-1) >= t) return;
+        ride.laps.push(t);
     }
 
     function event(t, type) {
@@ -58,13 +97,13 @@ export function Recorder({storage = globalThis.localStorage} = {}) {
     }
 
     function clear() {
-        ride = {samples: [], events: [], workoutName: '', ftp: null};
+        ride = emptyRide();
         distance = 0;
         try { storage?.removeItem(storageKey); } catch(_) { /* storage blocked */ }
     }
 
     return Object.freeze({
-        start, pause, resume, sample, save, clear,
+        start, pause, resume, lap, sample, save, clear,
         get ride() { return ride; },
     });
 }
@@ -74,6 +113,10 @@ export function packRide(ride) {
     return {
         workoutName: ride.workoutName,
         ftp: ride.ftp ?? null,
+        maxHr: ride.maxHr ?? null,
+        hrZones: ride.hrZones ?? null,
+        devices: ride.devices ?? [],
+        laps: ride.laps ?? [],
         events: ride.events,
         samples: ride.samples.map((s) => [s.t, s.power, s.heartRate, s.cadence, s.speed, s.distance]),
     };
@@ -95,7 +138,18 @@ export function sanitizeRide(data) {
         .filter((e) => Number.isFinite(e?.t) && (e.type === 'start' || e.type === 'stop'))
         .map((e) => ({t: e.t, type: e.type}));
     const workoutName = typeof data.workoutName === 'string' ? data.workoutName.slice(0, 120) : '';
-    return {samples, events, workoutName, ftp: finiteOrNull(data.ftp)};
+    // laps, zones and devices came later: rides saved without them still load
+    const laps = [];
+    for(const t of Array.isArray(data.laps) ? data.laps.slice(0, maxLaps) : []) {
+        if(Number.isFinite(t) && !(laps.at(-1) >= t)) laps.push(t);
+    }
+    return {
+        samples, events, laps, workoutName,
+        ftp: finiteOrNull(data.ftp),
+        maxHr: finiteOrNull(data.maxHr),
+        hrZones: zonesOrNull(data.hrZones),
+        devices: cleanDevices(data.devices),
+    };
 }
 
 // Storage -> Ride | undefined, a ride left over from a previous session

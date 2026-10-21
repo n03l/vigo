@@ -28,6 +28,9 @@ use **Install app** or **Add to home screen** in Chrome's menu.
    **Unregister** makes vigo forget a device.
 2. **Set your FTP** in **Settings**, and pick your tyre size. The tyre size is used for speed and distance
    from the speed sensor.
+   - **Heart rate zones**: enter your max heart rate and vigo sets the five zones to 50, 60, 70, 80 and 90%
+     of it. You can change where each zone starts. During a ride the heart rate takes the colour of its
+     zone: grey, blue, green, orange, red.
 3. **Pick a workout** in **Workouts**.
    - vigo comes with seven: Recovery, Endurance, Tempo 3×10, Sweet Spot 3×10, Threshold 2×20, VO2max 5×3 and
      40/20s.
@@ -40,10 +43,15 @@ use **Install app** or **Add to home screen** in Chrome's menu.
    - In MRC files, intervals are a percentage of FTP.
    - In ERG files, intervals are in watts. If the file says which FTP it was written for, the watts are scaled
      to yours; otherwise they're used as they are.
+   - The workout takes its name from the file's `FILE NAME` line, with `_` read as spaces and without the
+     `.erg`/`.mrc` ending, and shows its `DESCRIPTION` line under the name.
+   - Text messages in the file's `[COURSE TEXT]` section show over the chart at their time during the ride.
 4. **Ride.** Press **Start**.
    - **−** and **+** make the whole workout 5% easier or harder.
    - **Skip interval** jumps to the next interval.
    - **Pause** releases the resistance.
+   - The chart draws the power you ride over the workout, with your heart rate (pink) and cadence (cyan)
+     when those sensors are connected. Both use their own scale, 0 to 220 from the bottom to the top.
    - Before the power changes, vigo beeps for the last 5 seconds and the Interval tile counts down, so you
      can shift in time. It chimes at the end of the workout and sounds an alarm if the trainer drops out.
      **Settings → Sounds** turns the sounds off; the countdown on screen stays.
@@ -52,6 +60,9 @@ use **Install app** or **Add to home screen** in Chrome's menu.
 5. **Export.** Finished rides are listed in **History**, with a **.FIT** download you can upload to Strava,
    intervals.icu or Garmin Connect. A ride that was cut short, by closing the tab for example, is saved
    there too, marked "stopped early".
+   - The file is an indoor cycling activity with the workout's name, a lap for each interval, your FTP,
+     max heart rate and zones, the names of the devices you rode with, and normalized power, intensity
+     factor and TSS.
 
 If a device drops out during a ride, vigo pauses the workout, reconnects, and carries on by itself.
 

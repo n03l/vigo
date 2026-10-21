@@ -12,7 +12,8 @@ the user documentation; keep it in step with user-visible changes.
   counters), `uuids.js`.
 - `src/workout/`: `parse.js` reads .erg/.mrc
   ([format](https://support.trainerroad.com/hc/trainerroad-support/articles/201944204-creating-a-workout-from-an-erg-or-mrc-file)),
-  `target.js` gives the target power at a time, `player.js` is the workout clock, `builtin.js` the built-ins.
+  `target.js` gives the target power at a time, `player.js` is the workout clock, `builtin.js` the built-ins,
+  `cues.js` the interval countdowns and [COURSE TEXT] messages, `hrzones.js` the heart rate zones.
 - `src/record/`: the per-second `recorder.js` with autosave, and the `fit.js` FIT encoder.
 - `src/store/`: IndexedDB (`db.js`), the workout library, saved devices.
 - `src/ui/`: `dom.js` (`$`, `el`), the SVG `chart.js`, the hash `router.js`.

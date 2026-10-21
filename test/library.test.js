@@ -76,11 +76,31 @@ test('describe gives duration, average watts and how values scale', () => {
 
 test('rides pack and sanitize back to the same ride', () => {
     const ride = {
-        workoutName: 'W', ftp: 250,
+        workoutName: 'W', ftp: 250, maxHr: 190, hrZones: [95, 114, 133, 152, 171],
+        devices: [{kind: 'hr', name: 'HRM'}], laps: [12, 20],
         events: [{t: 10, type: 'start'}],
         samples: [{t: 10, power: 200, heartRate: null, cadence: 90, speed: 8, distance: 8}],
     };
     assert.deepEqual(sanitizeRide(structuredClone(packRide(ride))), ride);
+});
+
+test('a ride saved before laps, zones and devices still loads', () => {
+    const ride = sanitizeRide({workoutName: 'W', ftp: 250, events: [{t: 10, type: 'start'}], samples: [[10, 200]]});
+    assert.deepEqual([ride.laps, ride.maxHr, ride.hrZones, ride.devices], [[], null, null, []]);
+});
+
+test('sanitizeRide cleans laps, zones and devices', () => {
+    const ride = sanitizeRide({
+        events: [], samples: [[1, 200]],
+        laps: [5, 3, 'x', 8, 8, Infinity, 9],
+        hrZones: [100, 90, 120, 130, 140],
+        devices: [{kind: 'hr', name: 'a\u0000<img src=x onerror=alert(1)>'.repeat(5)}, {kind: '__proto__', name: 'x'}, null],
+    });
+    assert.deepEqual(ride.laps, [5, 8, 9]);
+    assert.equal(ride.hrZones, null);
+    assert.equal(ride.devices.length, 1);
+    assert.equal(ride.devices[0].name.length, 40);
+    assert.ok(!/\u0000/.test(ride.devices[0].name));
 });
 
 test('sanitizeRide drops what does not belong', () => {

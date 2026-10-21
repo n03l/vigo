@@ -1,10 +1,13 @@
 //
 // FIT activity encoder
 //
-// Writes the smallest activity file that Strava, intervals.icu and Garmin Connect accept:
-// file_id, event start, records, event stop, lap, session, activity.
-// Field numbers and scales are from the FIT SDK profile.
+// An activity file for Strava, intervals.icu and Garmin Connect: file_id, file_creator, device_info for
+// vigo and each sensor, sport, workout (its name), zones_target and hr_zone (FTP, heart rate zones),
+// then records with timer events, a lap per workout interval, session and activity.
+// Field numbers and scales are from the FIT SDK profile. Strings are fixed size, UTF-8, null padded.
 //
+
+import { defaultHrZones } from '../workout/hrzones.js';
 
 const fitEpoch = 631065600; // 1989-12-31T00:00:00Z in unix seconds
 
@@ -14,13 +17,39 @@ const baseTypes = {
     uint16:  {id: 0x84, size: 2, invalid: 0xffff},
     uint32:  {id: 0x86, size: 4, invalid: 0xffffffff},
     uint32z: {id: 0x8c, size: 4, invalid: 0},
+    string16: {id: 0x07, size: 16, string: true},
+    string32: {id: 0x07, size: 32, string: true},
+    string64: {id: 0x07, size: 64, string: true},
 };
+
+const softwareVersion = 1.0;
 
 // [name, field number, base type, scale]
 const messages = {
     fileId: {num: 0, fields: [
         ['type', 0, 'enum'], ['manufacturer', 1, 'uint16'], ['product', 2, 'uint16'],
         ['serialNumber', 3, 'uint32z'], ['timeCreated', 4, 'uint32'],
+    ]},
+    fileCreator: {num: 49, fields: [
+        ['softwareVersion', 0, 'uint16', 100],
+    ]},
+    deviceInfo: {num: 23, fields: [
+        ['timestamp', 253, 'uint32'], ['deviceIndex', 0, 'uint8'], ['deviceType', 1, 'uint8'],
+        ['manufacturer', 2, 'uint16'], ['product', 4, 'uint16'], ['softwareVersion', 5, 'uint16', 100],
+        ['sourceType', 25, 'enum'], ['productName', 27, 'string32'],
+    ]},
+    sport: {num: 12, fields: [
+        ['sport', 0, 'enum'], ['subSport', 1, 'enum'], ['name', 3, 'string16'],
+    ]},
+    workout: {num: 26, fields: [
+        ['sport', 4, 'enum'], ['numValidSteps', 6, 'uint16'], ['wktName', 8, 'string64'], ['subSport', 11, 'enum'],
+    ]},
+    zonesTarget: {num: 7, fields: [
+        ['maxHeartRate', 1, 'uint8'], ['functionalThresholdPower', 3, 'uint16'],
+        ['hrCalcType', 5, 'enum'], ['pwrCalcType', 7, 'enum'],
+    ]},
+    hrZone: {num: 8, fields: [
+        ['messageIndex', 254, 'uint16'], ['highBpm', 1, 'uint8'], ['name', 2, 'string16'],
     ]},
     event: {num: 21, fields: [
         ['timestamp', 253, 'uint32'], ['event', 0, 'enum'], ['eventType', 1, 'enum'],
@@ -30,13 +59,15 @@ const messages = {
         ['distance', 5, 'uint32', 100], ['speed', 6, 'uint16', 1000], ['power', 7, 'uint16'],
     ]},
     lap: {num: 19, fields: [
+        ['messageIndex', 254, 'uint16'],
         ['timestamp', 253, 'uint32'], ['event', 0, 'enum'], ['eventType', 1, 'enum'],
         ['startTime', 2, 'uint32'], ['totalElapsedTime', 7, 'uint32', 1000],
         ['totalTimerTime', 8, 'uint32', 1000], ['totalDistance', 9, 'uint32', 100],
         ['totalCalories', 11, 'uint16'], ['avgSpeed', 13, 'uint16', 1000],
         ['avgHeartRate', 15, 'uint8'], ['maxHeartRate', 16, 'uint8'], ['avgCadence', 17, 'uint8'],
-        ['avgPower', 19, 'uint16'], ['maxPower', 20, 'uint16'], ['sport', 25, 'enum'],
-        ['subSport', 39, 'enum'],
+        ['maxCadence', 18, 'uint8'], ['avgPower', 19, 'uint16'], ['maxPower', 20, 'uint16'],
+        ['lapTrigger', 24, 'enum'], ['sport', 25, 'enum'], ['normalizedPower', 33, 'uint16'],
+        ['subSport', 39, 'enum'], ['totalWork', 41, 'uint32'],
     ]},
     session: {num: 18, fields: [
         ['timestamp', 253, 'uint32'], ['event', 0, 'enum'], ['eventType', 1, 'enum'],
@@ -44,8 +75,10 @@ const messages = {
         ['totalElapsedTime', 7, 'uint32', 1000], ['totalTimerTime', 8, 'uint32', 1000],
         ['totalDistance', 9, 'uint32', 100], ['totalCalories', 11, 'uint16'],
         ['avgSpeed', 14, 'uint16', 1000], ['avgHeartRate', 16, 'uint8'], ['maxHeartRate', 17, 'uint8'],
-        ['avgCadence', 18, 'uint8'], ['avgPower', 20, 'uint16'], ['maxPower', 21, 'uint16'],
-        ['firstLapIndex', 25, 'uint16'], ['numLaps', 26, 'uint16'],
+        ['avgCadence', 18, 'uint8'], ['maxCadence', 19, 'uint8'], ['avgPower', 20, 'uint16'],
+        ['maxPower', 21, 'uint16'], ['firstLapIndex', 25, 'uint16'], ['numLaps', 26, 'uint16'],
+        ['normalizedPower', 34, 'uint16'], ['trainingStressScore', 35, 'uint16', 10],
+        ['intensityFactor', 36, 'uint16', 1000], ['thresholdPower', 45, 'uint16'], ['totalWork', 48, 'uint32'],
     ]},
     activity: {num: 34, fields: [
         ['timestamp', 253, 'uint32'], ['totalTimerTime', 0, 'uint32', 1000], ['numSessions', 1, 'uint16'],
@@ -60,6 +93,11 @@ const enums = {
     eventTypeStart: 0, eventTypeStop: 1, eventTypeStopAll: 4,
     sportCycling: 2, subSportIndoorCycling: 6,
     activityManual: 0,
+    sourceLocal: 5, sourceBle: 3,
+    // ble_device_type
+    deviceTypes: {trainer: 7, hr: 1, csc: 3},
+    hrCalcCustom: 0, hrCalcPercentMax: 1, pwrCalcPercentFtp: 1,
+    lapTriggerTime: 1, lapTriggerSessionEnd: 7,
 };
 
 const crcTable = [
@@ -94,7 +132,22 @@ function Bytes() {
         view = new DataView(buffer.buffer);
     }
 
+    // (String, Int) -> Void, UTF-8 cut on a character boundary, null terminated and padded
+    function writeString(text, size) {
+        ensure(size);
+        let bytes = new TextEncoder().encode(String(text ?? ''));
+        if(bytes.length > size - 1) {
+            let end = size - 1;
+            while(end > 0 && (bytes[end] & 0xc0) === 0x80) end -= 1;
+            bytes = bytes.slice(0, end);
+        }
+        buffer.fill(0, length, length + size);
+        buffer.set(bytes, length);
+        length += size;
+    }
+
     function write(type, value) {
+        if(type.string) return writeString(value, type.size);
         ensure(type.size);
         if(type.size === 1) view.setUint8(length, value);
         else if(type.size === 2) view.setUint16(length, value, true);
@@ -145,7 +198,7 @@ function Writer() {
         out.u8(localTypes[name]);
         for(const [field, , typeName, scale] of spec.fields) {
             const type = baseTypes[typeName];
-            out.write(type, fieldValue(type, values[field], scale));
+            out.write(type, type.string ? values[field] : fieldValue(type, values[field], scale));
         }
     }
 
@@ -165,17 +218,34 @@ function max(values) {
     return valid.length ? Math.max(...valid) : undefined;
 }
 
-// Ride -> Summary
+// [Number | null] -> Number | undefined, 30 s rolling average, raised to the 4th power, averaged,
+// 4th root; a missing second counts as 0 W
+export function normalizedPower(power) {
+    if(power.length < 30) return undefined;
+    let sum = 0;
+    let total = 0;
+    const watts = power.map((w) => (Number.isFinite(w) ? w : 0));
+    for(let i = 0; i < watts.length; i++) {
+        sum += watts[i];
+        if(i >= 30) sum -= watts[i - 30];
+        if(i >= 29) total += (sum / 30) ** 4;
+    }
+    return (total / (watts.length - 29)) ** 0.25;
+}
+
+// (Ride, {distanceBefore}) -> Summary, distanceBefore is where a lap starts in a ride's distance
 //
-// Ride {samples: [{t, power, heartRate, cadence, speed, distance}], events: [{t, type: 'start'|'stop'}]}
-export function summarize({samples}) {
+// Ride {samples: [{t, power, heartRate, cadence, speed, distance}], events: [{t, type: 'start'|'stop'}], ftp?}
+export function summarize({samples, ftp}, {distanceBefore = 0} = {}) {
     if(samples.length === 0) return undefined;
     const first = samples[0];
     const last = samples[samples.length - 1];
     const power = samples.map((s) => s.power);
     const work = power.filter(Number.isFinite).reduce((a, b) => a + b, 0); // joules, one sample per second
     const timerTime = samples.length;
-    const totalDistance = last.distance ?? undefined;
+    const totalDistance = Number.isFinite(last.distance) ? last.distance - (distanceBefore ?? 0) : undefined;
+    const np = normalizedPower(power);
+    const intensityFactor = Number.isFinite(np) && ftp > 0 ? np / ftp : undefined;
 
     return {
         startTime: first.t,
@@ -183,15 +253,36 @@ export function summarize({samples}) {
         totalElapsedTime: last.t + 1 - first.t,
         totalTimerTime: timerTime,
         totalDistance,
+        totalWork: work,
         // roughly 1 kcal per kJ of work at the pedals
         totalCalories: work / 1000,
         avgSpeed: Number.isFinite(totalDistance) ? totalDistance / timerTime : undefined,
         avgPower: mean(power),
         maxPower: max(power),
+        normalizedPower: np,
+        intensityFactor,
+        trainingStressScore: Number.isFinite(intensityFactor) ? timerTime * np * intensityFactor / (ftp * 3600) * 100 : undefined,
         avgHeartRate: mean(samples.map((s) => s.heartRate).filter((x) => x > 0)),
         maxHeartRate: max(samples.map((s) => s.heartRate)),
         avgCadence: mean(samples.map((s) => s.cadence).filter((x) => x > 0)),
+        maxCadence: max(samples.map((s) => s.cadence)),
     };
+}
+
+// (Ride) -> [[Sample]], the samples split at the start of each workout interval
+function lapSlices({samples, laps = []}) {
+    const slices = [[]];
+    let next = 0;
+    for(const s of samples) {
+        let moved = false;
+        while(next < laps.length && laps[next] <= s.t) {
+            next += 1;
+            moved = true;
+        }
+        if(moved && slices.at(-1).length > 0) slices.push([]);
+        slices.at(-1).push(s);
+    }
+    return slices;
 }
 
 // (Ride, {timezoneOffset: minutes}) -> Uint8Array
@@ -210,6 +301,7 @@ export function encodeActivity(ride, {timezoneOffset = 0} = {}) {
         serialNumber: (summary.startTime % 0xfffffffe) + 1,
         timeCreated: start,
     });
+    writeHeader(w, ride, start);
 
     const events = ride.events.length ? ride.events : [{t: summary.startTime, type: 'start'}];
     const samples = [...ride.samples];
@@ -234,25 +326,32 @@ export function encodeActivity(ride, {timezoneOffset = 0} = {}) {
     }
     w.message('event', {timestamp: end, event: enums.eventTimer, eventType: enums.eventTypeStopAll});
 
-    const totals = {
-        timestamp: end,
-        startTime: start,
-        totalElapsedTime: summary.totalElapsedTime,
-        totalTimerTime: summary.totalTimerTime,
-        totalDistance: summary.totalDistance,
-        totalCalories: summary.totalCalories,
-        avgSpeed: summary.avgSpeed,
-        avgHeartRate: summary.avgHeartRate,
-        maxHeartRate: summary.maxHeartRate,
-        avgCadence: summary.avgCadence,
-        avgPower: summary.avgPower,
-        maxPower: summary.maxPower,
+    const totals = (s) => ({
+        ...s,
+        timestamp: toFitTime(s.endTime),
+        startTime: toFitTime(s.startTime),
         sport: enums.sportCycling,
         subSport: enums.subSportIndoorCycling,
-    };
-    w.message('lap', {...totals, event: enums.eventLap, eventType: enums.eventTypeStop});
+    });
+    const slices = lapSlices(ride);
+    let distanceBefore = 0;
+    // laps follow each other with no gap, a pause at an interval change counts in the lap before it,
+    // so their elapsed times and distances add up to the session's as the FIT docs ask
+    slices.forEach((slice, i) => {
+        const lap = summarize({samples: slice, ftp: ride.ftp}, {distanceBefore});
+        distanceBefore = slice.at(-1).distance ?? distanceBefore;
+        const last = i === slices.length - 1;
+        lap.startTime = i === 0 ? summary.startTime : slice[0].t;
+        lap.endTime = last ? summary.endTime : slices[i + 1][0].t;
+        lap.totalElapsedTime = lap.endTime - lap.startTime;
+        w.message('lap', {
+            ...totals(lap), messageIndex: i, event: enums.eventLap, eventType: enums.eventTypeStop,
+            lapTrigger: last ? enums.lapTriggerSessionEnd : enums.lapTriggerTime,
+        });
+    });
     w.message('session', {
-        ...totals, event: enums.eventSession, eventType: enums.eventTypeStop, firstLapIndex: 0, numLaps: 1,
+        ...totals(summary), timestamp: end, event: enums.eventSession, eventType: enums.eventTypeStop,
+        firstLapIndex: 0, numLaps: slices.length, thresholdPower: ride.ftp,
     });
     w.message('activity', {
         timestamp: end,
@@ -276,6 +375,38 @@ export function encodeActivity(ride, {timezoneOffset = 0} = {}) {
     file.set(data, 14);
     view.setUint16(14 + data.length, crc16(file, 0, 14 + data.length), true);
     return file;
+}
+
+// the messages that describe the ride before its records
+function writeHeader(w, ride, start) {
+    w.message('fileCreator', {softwareVersion});
+    w.message('deviceInfo', {
+        timestamp: start, deviceIndex: 0, manufacturer: enums.manufacturerDevelopment, product: 0,
+        softwareVersion, sourceType: enums.sourceLocal, productName: 'vigo',
+    });
+    (ride.devices ?? []).forEach((device, i) => w.message('deviceInfo', {
+        timestamp: start, deviceIndex: i + 1, deviceType: enums.deviceTypes[device.kind],
+        sourceType: enums.sourceBle, productName: device.name,
+    }));
+    w.message('sport', {sport: enums.sportCycling, subSport: enums.subSportIndoorCycling, name: 'Indoor cycling'});
+    if(ride.workoutName) {
+        w.message('workout', {
+            sport: enums.sportCycling, subSport: enums.subSportIndoorCycling, numValidSteps: 0, wktName: ride.workoutName,
+        });
+    }
+    const zones = ride.hrZones;
+    const standard = zones && ride.maxHr && defaultHrZones(ride.maxHr).every((z, i) => z === zones[i]);
+    w.message('zonesTarget', {
+        maxHeartRate: ride.maxHr, functionalThresholdPower: ride.ftp,
+        hrCalcType: !zones ? undefined : standard ? enums.hrCalcPercentMax : enums.hrCalcCustom,
+        pwrCalcType: enums.pwrCalcPercentFtp,
+    });
+    if(zones && ride.maxHr) {
+        // Garmin's layout: the top of the range below zone 1, then of zones 1 to 5, each top being where the
+        // next zone starts (a heart rate on a boundary counts in the higher zone), and max HR last
+        const tops = [...zones, ride.maxHr];
+        tops.forEach((highBpm, i) => w.message('hrZone', {messageIndex: i, highBpm, name: i ? `Zone ${i}` : 'Below zone 1'}));
+    }
 }
 
 function timerEvent(w, event) {

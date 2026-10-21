@@ -41,6 +41,37 @@ test('keeps hostile names as plain text, cleaned of control characters', () => {
     assert.equal(w2.name, 'a b c');
 });
 
+test('FILE NAME is tidied into the name, DESCRIPTION kept apart', () => {
+    const w = parseWorkout(fixture('user-style.mrc'), {fileName: 'renamed copy.mrc'});
+    assert.equal(w.name, 'Sweet spot 45m');
+    assert.equal(w.description, 'Three blocks at sweet spot, then cool down');
+    const noName = parseWorkout('[COURSE HEADER]\nDESCRIPTION = Only a description\nMINUTES PERCENT\n[END COURSE HEADER]\n[COURSE DATA]\n0 50\n1 50\n');
+    assert.equal(noName.name, 'Only a description');
+    assert.equal(parseWorkout(fixture('sweetspot.mrc')).description, '');
+});
+
+test('COURSE TEXT messages are read, bounded and sorted', () => {
+    const w = parseWorkout(fixture('user-style.mrc'));
+    assert.deepEqual(w.texts, [
+        {start: 0, duration: 10, text: 'Warm up easy'},
+        {start: 30, duration: 10, text: 'Spin at 100 rpm'},
+        {start: 120, duration: 300, text: 'Long message'},
+        {start: 180, duration: 15, text: 'First block, settle in'},
+        {start: 2690, duration: 1, text: 'Almost done'},
+    ]);
+    const many = parseWorkout(header + '0 50\n60 50\n[END COURSE DATA]\n[COURSE TEXT]\n'
+        + Array.from({length: 600}, (_, i) => `${i}\tm${i}\t5`).join('\n') + '\n[END COURSE TEXT]\n');
+    assert.equal(many.texts.length, 500);
+    const long = parseWorkout(header + '0 50\n60 50\n[COURSE TEXT]\n1\t' + 'x'.repeat(1000) + '\t5\n');
+    assert.equal(long.texts[0].text.length, 200);
+});
+
+test('hostile description and text messages stay plain text', () => {
+    const w = parseWorkout(fixture('hostile-name.mrc'));
+    assert.equal(w.description, '<script>alert(2)</script> & <img src=x onerror=alert(3)>');
+    assert.equal(w.texts[0].text, '<img src=x onerror=alert(1)>');
+});
+
 const header = '[COURSE HEADER]\nMINUTES PERCENT\n[END COURSE HEADER]\n[COURSE DATA]\n';
 const rejects = (text, pattern) => assert.throws(() => parseWorkout(text), (e) => {
     assert.ok(e instanceof WorkoutError, e);

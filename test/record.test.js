@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { encodeActivity, summarize, crc16 } from '../src/record/fit.js';
+import { encodeActivity, summarize, normalizedPower, crc16 } from '../src/record/fit.js';
 import { Recorder, loadSavedRide, clearSavedRide } from '../src/record/recorder.js';
 
 function memoryStorage() {
@@ -49,7 +49,13 @@ function readFit(bytes) {
             assert.ok(def, `data message for undefined local type ${local}`);
             const values = {};
             for(const f of def.fields) {
-                values[f.num] = f.size === 1 ? view.getUint8(i) : f.size === 2 ? view.getUint16(i, true) : view.getUint32(i, true);
+                if(f.type === 0x07) {
+                    const raw = bytes.slice(i, i + f.size);
+                    assert.equal(raw[f.size - 1], 0, 'strings are null terminated');
+                    values[f.num] = new TextDecoder().decode(raw.slice(0, raw.indexOf(0)));
+                } else {
+                    values[f.num] = f.size === 1 ? view.getUint8(i) : f.size === 2 ? view.getUint16(i, true) : view.getUint32(i, true);
+                }
                 i += f.size;
             }
             out.push({num: def.num, values});
@@ -94,6 +100,7 @@ test('FIT file is valid and has the expected messages', () => {
 
     assert.equal(nums[0], 0, 'file_id first');
     assert.deepEqual(nums.slice(-3), [19, 18, 34], 'lap, session, activity last');
+    assert.equal(nums.indexOf(20) > nums.lastIndexOf(7), true, 'header messages before the records');
     assert.equal(nums.filter((n) => n === 20).length, 10, '10 records');
 
     const records = messages.filter((m) => m.num === 20);
@@ -169,5 +176,95 @@ test('recorder survives storage that throws', () => {
         assert.equal(loadSavedRide(storage), undefined);
     } finally {
         console.warn = warn;
+    }
+});
+
+function intervalRide() {
+    const r = Recorder({storage: memoryStorage()});
+    r.start({
+        t: t0, workoutName: 'Sweet spot 45m', ftp: 200, maxHr: 190, hrZones: [95, 114, 133, 152, 171],
+        devices: [{kind: 'trainer', name: 'RAMPA 12345'}, {kind: 'hr', name: 'HRM-Fake'}],
+    });
+    for(let s = 0; s < 120; s++) {
+        if(s === 60) r.lap(t0 + s);
+        r.sample({t: t0 + s, power: s < 60 ? 100 : 300, heartRate: 140, cadence: s < 60 ? 85 : 95, speed: 10});
+    }
+    return r.ride;
+}
+
+test('FIT file carries the workout name, sport, devices and zones', () => {
+    const messages = readFit(encodeActivity(intervalRide()));
+    const one = (num) => messages.find((m) => m.num === num).values;
+
+    assert.equal(one(49)[0], 100, 'file_creator software version 1.00');
+    const devices = messages.filter((m) => m.num === 23).map((m) => [m.values[0], m.values[27], m.values[1], m.values[25]]);
+    assert.deepEqual(devices, [[0, 'vigo', 0xff, 5], [1, 'RAMPA 12345', 7, 3], [2, 'HRM-Fake', 1, 3]]);
+    assert.deepEqual(one(12), {0: 2, 1: 6, 3: 'Indoor cycling'});
+    assert.equal(one(26)[8], 'Sweet spot 45m');
+    assert.equal(one(26)[4], 2);
+    assert.equal(one(26)[11], 6);
+    assert.deepEqual(one(7), {1: 190, 3: 200, 5: 1, 7: 1}, 'standard zones are % of max HR');
+    assert.deepEqual(messages.filter((m) => m.num === 8).map((m) => m.values[1]), [95, 114, 133, 152, 171, 190]);
+});
+
+test('FIT file has a lap per workout interval and NP, IF and TSS in the session', () => {
+    const messages = readFit(encodeActivity(intervalRide()));
+    const laps = messages.filter((m) => m.num === 19).map((m) => m.values);
+    assert.equal(laps.length, 2);
+    assert.deepEqual(laps.map((l) => [l[254], l[2] - (t0 - fitEpoch), l[8], l[19], l[18], l[9]]),
+        [[0, 0, 60000, 100, 85, 60000], [1, 60, 60000, 300, 95, 60000]]);
+    assert.deepEqual(laps.map((l) => l[24]), [1, 7], 'time, then session end');
+
+    const session = messages.find((m) => m.num === 18).values;
+    assert.equal(session[26], 2, 'num laps');
+    assert.equal(session[45], 200, 'threshold power');
+    assert.equal(session[48], 60 * 100 + 60 * 300, 'total work in J');
+    assert.equal(session[19], 95, 'max cadence');
+    const np = normalizedPower(intervalRide().samples.map((s) => s.power));
+    assert.equal(session[34], Math.round(np));
+    assert.equal(session[36], Math.round(np / 200 * 1000));
+    assert.equal(session[35], Math.round(120 * np * (np / 200) / (200 * 3600) * 100 * 10));
+});
+
+test('normalized power: steady power is itself, and needs 30 seconds', () => {
+    assert.equal(normalizedPower(Array(29).fill(200)), undefined);
+    assert.equal(Math.round(normalizedPower(Array(600).fill(200))), 200);
+    const surges = Array.from({length: 600}, (_, i) => (Math.floor(i / 60) % 2 ? 300 : 100));
+    assert.ok(normalizedPower(surges) > 200);
+});
+
+test('custom zones and odd strings are written safely', () => {
+    const ride = {...intervalRide(), hrZones: [100, 120, 140, 160, 180], workoutName: 'é'.repeat(40) + '<img src=x onerror=alert(1)>'};
+    const messages = readFit(encodeActivity(ride));
+    assert.equal(messages.find((m) => m.num === 7).values[5], 0, 'custom zones');
+    const name = messages.find((m) => m.num === 26).values[8];
+    assert.equal(name, 'é'.repeat(31), 'cut on a character boundary inside 63 bytes');
+});
+
+test('a ride without zones, devices or name still encodes', () => {
+    const {r} = sampleRide();
+    const messages = readFit(encodeActivity({...r.ride, workoutName: ''}));
+    assert.equal(messages.some((m) => m.num === 26), false, 'no workout message without a name');
+    assert.equal(messages.some((m) => m.num === 8), false);
+    assert.equal(messages.filter((m) => m.num === 19).length, 1);
+});
+
+test('laps add up to the session, also with a pause at an interval change', () => {
+    const r = Recorder({storage: memoryStorage()});
+    r.start({t: t0, workoutName: 'W', ftp: 200});
+    for(let s = 0; s < 40; s++) r.sample({t: t0 + s, power: 150, speed: 5});
+    r.pause(t0 + 40);
+    r.resume(t0 + 100);
+    r.lap(t0 + 100);
+    for(let s = 0; s < 20; s++) r.sample({t: t0 + 100 + s, power: 250, speed: 5});
+    r.lap(t0 + 120);
+    for(let s = 0; s < 10; s++) r.sample({t: t0 + 120 + s, power: 100, speed: 5});
+    const messages = readFit(encodeActivity(r.ride));
+    const laps = messages.filter((m) => m.num === 19).map((m) => m.values);
+    const session = messages.find((m) => m.num === 18).values;
+    assert.deepEqual(laps.map((l) => [l[2] - (t0 - fitEpoch), l[253] - (t0 - fitEpoch), l[7], l[8]]),
+        [[0, 100, 100000, 40000], [100, 120, 20000, 20000], [120, 130, 10000, 10000]]);
+    for(const [field, total] of [[7, 'elapsed'], [8, 'timer'], [9, 'distance']]) {
+        assert.equal(laps.reduce((sum, l) => sum + l[field], 0), session[field], `lap ${total} times add up`);
     }
 });

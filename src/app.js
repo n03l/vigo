@@ -7,7 +7,8 @@ import { RevCounter } from './ble/revs.js';
 import { parseWorkout, limits as workoutLimits } from './workout/parse.js';
 import { targetAt, segmentIndexAt, toWatts, maxWatts, maxTargetFor } from './workout/target.js';
 import { Player } from './workout/player.js';
-import { cueTimes, cueAt, nextCue, countdown } from './workout/cues.js';
+import { cueTimes, cueAt, nextCue, countdown, textAt } from './workout/cues.js';
+import { defaultHrZones, validHrZones, hrZone, maxHrBounds } from './workout/hrzones.js';
 import { builtins } from './workout/builtin.js';
 import { Recorder, loadSavedRide, clearSavedRide, packRide, sanitizeRide } from './record/recorder.js';
 import { encodeActivity, summarize } from './record/fit.js';
@@ -24,7 +25,7 @@ import { $, el, formatDuration } from './ui/dom.js';
 const settingsKey = 'vigo.settings';
 const legacyWorkoutKey = 'vigo.workout';
 const selectedKey = 'vigo.selected';
-const bounds = {ftp: [50, 600], wheel: [1000, 3000], bias: [-50, 50]};
+const bounds = {ftp: [50, 600], wheel: [1000, 3000], bias: [-50, 50], maxHr: maxHrBounds};
 const inBounds = ([min, max], x) => Number.isInteger(x) && x >= min && x <= max;
 
 // tyre size -> wheel circumference in mm (ETRTO tables, as used by bike computers)
@@ -53,10 +54,13 @@ function writeStorage(key, value) {
 
 function loadSettings() {
     const saved = readStorage(settingsKey) ?? {};
+    const maxHr = inBounds(bounds.maxHr, saved.maxHr) ? saved.maxHr : 190;
     return {
         ftp: inBounds(bounds.ftp, saved.ftp) ? saved.ftp : 200,
         wheel: inBounds(bounds.wheel, saved.wheel) ? saved.wheel : 2105,
         sound: typeof saved.sound === 'boolean' ? saved.sound : true,
+        maxHr,
+        hrZones: validHrZones(saved.hrZones, maxHr) ? [...saved.hrZones] : defaultHrZones(maxHr),
     };
 }
 
@@ -81,7 +85,7 @@ let cues = [];     // interval cue times of the ride, seconds
 const recorder = Recorder();
 const beeper = Beeper();
 const sound = (name) => { if(settings.sound) beeper[name](); };
-const chart = WorkoutChart($('chart'));
+const chart = WorkoutChart($('chart'), $('chart-legend'));
 
 // live sensor data
 
@@ -195,6 +199,13 @@ const deviceButtons = {trainer: $('dev-trainer'), hr: $('dev-hr'), csc: $('dev-c
 const statusText = {connecting: 'connecting…', searching: 'searching…', reconnecting: 'reconnecting…'};
 const devicePickers = {trainer: pickers.trainer, hr: pickers.heartRate, csc: pickers.speedCadence};
 const deviceLabels = {trainer: 'Trainer', hr: 'Heart rate', csc: 'Speed/cadence'};
+
+// -> [{kind, name}], the sensors on this ride, for the FIT file
+function connectedDevices() {
+    return Object.entries(connections)
+        .filter(([, connection]) => connection.status === 'connected')
+        .map(([kind, connection]) => ({kind, name: connection.name}));
+}
 
 let deviceConfig = loadDeviceConfig();
 let offeringSaved = false;
@@ -462,7 +473,7 @@ function selectWorkout(id, {navigate = false} = {}) {
     // a finished ride stays on screen until another workout is picked
     if(player) {
         player = undefined;
-        chart.clearPower();
+        chart.clearTraces();
         chart.progress(0);
         document.body.dataset.state = 'idle';
     }
@@ -476,9 +487,17 @@ function selectWorkout(id, {navigate = false} = {}) {
     if(navigate && entry) router?.go('ride');
 }
 
+const squash = (text) => text.toLowerCase().replace(/[\s_]+/g, ' ').trim();
+
+// Workout -> String, empty when it only repeats the name
+function descriptionOf(workout) {
+    return squash(workout.description) === squash(workout.name) ? '' : workout.description;
+}
+
 function drawWorkout() {
     if(!workout) {
         $('workout-name').textContent = '';
+        $('workout-description').textContent = '';
         $('workout-meta').textContent = '';
         $('chart-empty').hidden = false;
         $('btn-start').disabled = true;
@@ -487,6 +506,7 @@ function drawWorkout() {
     chart.draw(workout, {ftp: settings.ftp, bias});
     $('chart-empty').hidden = true;
     $('workout-name').textContent = workout.name;
+    $('workout-description').textContent = descriptionOf(workout);
     const d = describe(workout, settings.ftp);
     const peak = d.peakWatts > hardFraction * settings.ftp
         ? ` · peaks at ${d.peakWatts} W${d.peakCapped ? ' (capped)' : ''}` : '';
@@ -514,7 +534,11 @@ function libraryRow(entry) {
     const meta = el('span', {class: 'row-meta'});
     const select = el('button', {type: 'button', class: 'workout-row'}, [
         el('span', {class: 'profile-slot'}),
-        el('span', {class: 'row-text'}, [el('span', {class: 'row-title'}, entry.name), meta]),
+        el('span', {class: 'row-text'}, [
+            el('span', {class: 'row-title'}, entry.name),
+            el('span', {class: 'row-description'}, descriptionOf(entry.workout)),
+            meta,
+        ]),
     ]);
     select.addEventListener('click', () => selectWorkout(entry.id, {navigate: true}));
 
@@ -607,19 +631,45 @@ async function onFile(event) {
 function onSettingsInput(key, input) {
     const value = Number(input.value);
     if(!inBounds(bounds[key], value)) {
-        $('settings-error').textContent = key === 'ftp'
-            ? 'FTP must be a whole number between 50 and 600.'
-            : 'Pick a tyre size from the list.';
+        const messages = {
+            ftp: 'FTP must be a whole number between 50 and 600.',
+            wheel: 'Pick a tyre size from the list.',
+            maxHr: `Max heart rate must be a whole number between ${bounds.maxHr[0]} and ${bounds.maxHr[1]}.`,
+        };
+        $(key === 'maxHr' ? 'hr-error' : 'settings-error').textContent = messages[key];
         return;
     }
-    $('settings-error').textContent = '';
+    $(key === 'maxHr' ? 'hr-error' : 'settings-error').textContent = '';
     if(settings[key] === value) return;
     settings[key] = value;
+    // the zones follow max HR, edits to single zones start again from the standard split
+    if(key === 'maxHr') {
+        settings.hrZones = defaultHrZones(value);
+        renderHrZones();
+    }
     writeStorage(settingsKey, settings);
     if(key === 'ftp') {
         drawWorkout();
         renderLibrary();
     }
+}
+
+// (Int) -> Void, zone i's lower bound edited in Settings
+function onHrZoneInput(i) {
+    const next = [...settings.hrZones];
+    next[i] = Number($(`hr-z${i + 1}`).value);
+    if(!validHrZones(next, settings.maxHr)) {
+        $('hr-error').textContent = `Zones must go up, each a whole number between 40 and your max heart rate (${settings.maxHr}).`;
+        return;
+    }
+    $('hr-error').textContent = '';
+    settings.hrZones = next;
+    writeStorage(settingsKey, settings);
+}
+
+function renderHrZones() {
+    $('max-hr').value = settings.maxHr;
+    settings.hrZones.forEach((bpm, i) => { $(`hr-z${i + 1}`).value = bpm; });
 }
 
 function renderWheelSizes() {
@@ -666,9 +716,12 @@ function begin() {
     lastTarget = undefined;
     lastSampleT = 0;
     autoPaused = false;
-    chart.clearPower();
+    chart.clearTraces();
     chart.progress(0);
-    recorder.start({t: nowSeconds(), workoutName: workout.name, ftp: settings.ftp});
+    recorder.start({
+        t: nowSeconds(), workoutName: workout.name, ftp: settings.ftp,
+        maxHr: settings.maxHr, hrZones: settings.hrZones, devices: connectedDevices(),
+    });
     touchWorkout(selectedId);
     cues = cueTimes(workout, settings.ftp);
     player = Player({workout, onTick, onState});
@@ -683,15 +736,18 @@ function onTick(second) {
     const power = averagePower(1000);
     const t = Math.max(lastSampleT + 1, nowSeconds());
     lastSampleT = t;
-    const v = speed();
+    // a new interval is a new lap in the FIT file
+    if(cue === 'go') recorder.lap(t);
+    const hr = heartRate();
+    const rpm = cadence() === undefined ? undefined : Math.round(cadence());
     recorder.sample({
         t,
         power: power === undefined ? undefined : Math.round(power),
-        heartRate: heartRate(),
-        cadence: cadence() === undefined ? undefined : Math.round(cadence()),
-        speed: v,
+        heartRate: hr,
+        cadence: rpm,
+        speed: speed(),
     });
-    chart.addPower(second, power);
+    chart.addSample(second, {power, heartRate: hr, cadence: rpm});
 }
 
 function onState(state) {
@@ -994,7 +1050,10 @@ function render() {
     const elapsed = player?.elapsed ?? 0;
 
     text('v-power', number(averagePower(3000)));
-    text('v-hr', number(heartRate()));
+    const hr = heartRate();
+    text('v-hr', number(hr));
+    const hrZoneNow = String(hrZone(hr, settings.hrZones));
+    if($('v-hr').dataset.zone !== hrZoneNow) $('v-hr').dataset.zone = hrZoneNow;
     text('v-cadence', number(cadence()));
     const v = speed();
     text('v-speed', Number.isFinite(v) ? `rpm · ${(v * 3.6).toFixed(1)} km/h` : 'rpm');
@@ -1028,6 +1087,9 @@ function render() {
         text('v-remaining', ' ');
     }
     text('v-elapsed', formatDuration(elapsed));
+    const message = workout && (state === 'running' || state === 'paused') ? textAt(workout.texts, elapsed) : undefined;
+    text('cue-text', message ?? '');
+    $('cue-text').hidden = message === undefined;
     if(player && state !== 'finished') chart.progress(elapsed);
 
     const riding = state === 'running' || state === 'paused';
@@ -1066,6 +1128,7 @@ function init() {
     $('ftp').value = settings.ftp;
     $('sound').checked = settings.sound;
     renderWheelSizes();
+    renderHrZones();
 
     if(!isSupported()) {
         banner('no-ble', 'error', 'This browser has no Web Bluetooth. Use Chrome or Edge on a laptop or on Android.');
@@ -1083,6 +1146,8 @@ function init() {
     $('file').addEventListener('change', onFile);
     $('ftp').addEventListener('change', (e) => onSettingsInput('ftp', e.target));
     $('wheel').addEventListener('change', (e) => onSettingsInput('wheel', e.target));
+    $('max-hr').addEventListener('change', (e) => onSettingsInput('maxHr', e.target));
+    settings.hrZones.forEach((_, i) => $(`hr-z${i + 1}`).addEventListener('change', () => onHrZoneInput(i)));
     $('sound').addEventListener('change', (e) => {
         settings.sound = e.target.checked;
         writeStorage(settingsKey, settings);

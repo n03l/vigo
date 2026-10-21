@@ -1,5 +1,6 @@
 [COURSE HEADER]
-FILE NAME = Short test
+DESCRIPTION = Three short steps for the tests
+FILE NAME = Short_test.mrc
 MINUTES PERCENT
 [END COURSE HEADER]
 [COURSE DATA]
@@ -10,3 +11,7 @@ MINUTES PERCENT
 0.10	60
 0.15	120
 [END COURSE DATA]
+[COURSE TEXT]
+0	Easy start	2
+3	Hold it	3
+[END COURSE TEXT]

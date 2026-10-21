@@ -132,6 +132,19 @@ def run(out):
         expect(page.locator("#wheel option:checked")).to_have_text("700×25c")
         page.select_option("#wheel", label="700×23c")
         expect(page.locator("#wheel option:checked")).to_have_text("700×23c")
+        # heart rate zones: 50 to 90% of max HR, follow max HR, editable one by one
+        expect(page.locator("#max-hr")).to_have_value("190")
+        assert [page.input_value(f"#hr-z{i}") for i in range(1, 6)] == ["95", "114", "133", "152", "171"]
+        page.fill("#max-hr", "160")
+        page.locator("#max-hr").dispatch_event("change")
+        assert [page.input_value(f"#hr-z{i}") for i in range(1, 6)] == ["80", "96", "112", "128", "144"]
+        page.fill("#hr-z5", "120")
+        page.locator("#hr-z5").dispatch_event("change")
+        expect(page.locator("#hr-error")).to_contain_text("Zones must go up")
+        page.fill("#hr-z5", "135")
+        page.locator("#hr-z5").dispatch_event("change")
+        expect(page.locator("#hr-error")).to_be_hidden()
+        assert page.evaluate("JSON.parse(localStorage.getItem('vigo.settings')).hrZones") == [80, 96, 112, 128, 135]
         shoot("settings-desktop")
 
         # workouts page: built-ins, picking one goes back to the ride view
@@ -152,7 +165,8 @@ def run(out):
         # an upload stays on the workouts page, at the top and selected, the same file twice is one entry
         tab("workouts")
         page.set_input_files("#file", str(FIXTURES / "short.mrc"))
-        expect(rows.first).to_contain_text("Short test")
+        expect(rows.first).to_contain_text("Short test")  # FILE NAME = Short_test.mrc
+        expect(rows.first).to_contain_text("Three short steps for the tests")
         expect(rows).to_have_count(8)
         expect(body).to_have_attribute("data-view", "workouts")
         page.set_input_files("#file", str(FIXTURES / "short.mrc"))
@@ -162,7 +176,9 @@ def run(out):
         expect(rows).to_have_count(8)
         tab("ride")
         expect(page.locator("#workout-name")).to_have_text("Short test")
+        expect(page.locator("#workout-description")).to_have_text("Three short steps for the tests")
         expect(page.locator("#workout-meta")).to_contain_text("0:09")
+        expect(page.locator("#cue-text")).to_be_hidden()
         expect(page.locator("#v-target")).to_have_text("125")
 
         # history starts empty
@@ -189,6 +205,14 @@ def run(out):
         shoot("settings-devices-desktop")
         tab("ride")
         expect(page.locator("#v-hr")).to_have_text("140")
+        expect(page.locator("#v-hr")).to_have_attribute("data-zone", "5")  # 140 >= the edited 135
+        assert page.evaluate("getComputedStyle(document.getElementById('v-hr')).color") == "rgb(236, 75, 75)"
+        tab("settings")
+        page.fill("#max-hr", "190")
+        page.locator("#max-hr").dispatch_event("change")
+        tab("ride")
+        expect(page.locator("#v-hr")).to_have_attribute("data-zone", "3")
+        assert page.evaluate("getComputedStyle(document.getElementById('v-hr')).color") == "rgb(47, 191, 106)"
         expect(page.locator("#v-cadence")).to_have_text("85", timeout=4000)
         expect(page.locator("#v-speed")).to_contain_text("30.2 km/h")  # 4 rev/s x 2.096 m
         shoot("ride-desktop")
@@ -199,11 +223,19 @@ def run(out):
         expect(page.locator(".tabs")).to_be_hidden()
         wait_until(page, "window.__ble.writes.length > 0")
         assert targets(page)[0] == 125, targets(page)
+        # the file's text messages show over the chart for their duration
+        expect(page.locator("#cue-text")).to_have_text("Easy start")
         # the power doubles at 3 s: the Interval tile counts down, with beeps
         expect(page.locator("#tile-interval")).to_have_class(re.compile(r"\bcountdown\b"))
         expect(page.locator("#v-next")).to_have_text(re.compile(r"^250 W in [1-3]$"))
         assert 880 in beeps(page), beeps(page)
         expect(page.locator("#v-power")).not_to_have_text("--", timeout=3000)
+        expect(page.locator("#cue-text")).to_have_text("Hold it", timeout=5000)
+        # heart rate and cadence lines next to power, in the legend once they have points
+        wait_until(page, "document.querySelector('.hr-trace').getAttribute('points').split(' ').length >= 2")
+        wait_until(page, "document.querySelector('.cadence-trace').getAttribute('points').split(' ').length >= 2")
+        for line in ("power", "heartRate", "cadence"):
+            expect(page.locator(f'#chart-legend [data-line="{line}"]')).to_be_visible()
 
         # the ride screen can't be left mid ride
         page.evaluate("location.hash = '#/history'")
@@ -260,6 +292,7 @@ def run(out):
         expect(page.locator("#summary-stats")).to_contain_text("Average power")
         expect(page.locator("#summary-saved")).to_have_text("Saved to history.")
         expect(page.locator("#v-target")).to_have_text("--")
+        expect(page.locator("#cue-text")).to_be_hidden()
         page.screenshot(path=str(out / "summary-desktop.png"))
 
         with page.expect_download() as info:
@@ -268,6 +301,7 @@ def run(out):
         fit = Path(download.path()).read_bytes()
         assert fit[8:12] == b".FIT", fit[:14]
         assert download.suggested_filename.startswith("vigo-") and download.suggested_filename.endswith(".fit")
+        assert b"Short test\0" in fit and b"Indoor cycling\0" in fit and b"RAMPA 12345\0" in fit, "FIT names"
         page.click("#btn-close")
         assert page.evaluate("localStorage.getItem('vigo.ride')") is None
         expect(page.locator(".tabs")).to_be_visible()
@@ -323,6 +357,7 @@ def run(out):
         expect(rows.first).to_contain_text(hostile)
         tab("ride")
         expect(page.locator("#workout-name")).to_have_text(hostile)
+        expect(page.locator("#workout-description")).to_have_text("<script>alert(2)</script> & <img src=x onerror=alert(3)>")
         expect_connected("trainer")  # came back by itself after the reloads
         # with the sounds off nothing plays
         tab("settings")
@@ -333,6 +368,7 @@ def run(out):
         page.click("#btn-start")
         expect(body).to_have_attribute("data-state", "running")
         page.wait_for_timeout(1200)
+        expect(page.locator("#cue-text")).to_have_text(hostile)
         page.click("#btn-skip")
         page.click("#btn-skip")
         expect(page.locator("#summary")).to_be_visible()

@@ -20,6 +20,16 @@
     --z5: #f5832a;
     --z6: #ec4b4b;
 
+    /* heart rate zones, the Garmin and Polar colours */
+    --hr1: #9aa5b1;
+    --hr2: #3d83f5;
+    --hr3: #2fbf6a;
+    --hr4: #f5832a;
+    --hr5: #ec4b4b;
+
+    --hr-line: #ff5c8a;
+    --cadence-line: #38d6e8;
+
     --radius: 12px;
     --gutter: 16px;
     --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -259,6 +269,11 @@ main {
 
 .tile-power .tile-value { color: var(--text); }
 .tile-target .tile-value { color: var(--accent); }
+#v-hr[data-zone="1"] { color: var(--hr1); }
+#v-hr[data-zone="2"] { color: var(--hr2); }
+#v-hr[data-zone="3"] { color: var(--hr3); }
+#v-hr[data-zone="4"] { color: var(--hr4); }
+#v-hr[data-zone="5"] { color: var(--hr5); }
 .tile-target.out-of-range { border-color: var(--danger); }
 .tile-target.out-of-range .tile-unit { color: var(--danger); font-weight: 650; }
 .tile-interval.countdown { border-color: var(--accent); }
@@ -308,6 +323,53 @@ main {
 .done { fill: var(--bg); opacity: 0.45; }
 .ftp-line { stroke: var(--text); stroke-width: 1; stroke-dasharray: 4 4; opacity: 0.5; }
 .power-trace { fill: none; stroke: var(--text); stroke-width: 2; stroke-linejoin: round; }
+.hr-trace { fill: none; stroke: var(--hr-line); stroke-width: 1.5; stroke-linejoin: round; }
+.cadence-trace { fill: none; stroke: var(--cadence-line); stroke-width: 1.5; stroke-linejoin: round; }
+
+.chart-legend {
+    position: absolute;
+    left: 8px;
+    bottom: 6px;
+    margin: 0;
+    display: flex;
+    gap: 10px;
+    font-size: 12px;
+    color: var(--text);
+    pointer-events: none;
+}
+.chart-legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 1px 6px;
+    border-radius: 6px;
+    background: rgb(13 16 21 / 0.7);
+}
+.chart-legend span[hidden] { display: none; }
+.chart-legend span::before { content: ""; width: 12px; height: 3px; border-radius: 2px; background: var(--text); }
+.chart-legend .legend-hr::before { background: var(--hr-line); }
+.chart-legend .legend-cadence::before { background: var(--cadence-line); }
+
+/* text messages from the workout file */
+.cue-text {
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: max-content;
+    max-width: calc(100% - 24px);
+    margin: 0;
+    padding: 8px 14px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: rgb(13 16 21 / 0.85);
+    color: var(--text);
+    font-size: 17px;
+    font-weight: 600;
+    text-align: center;
+    overflow-wrap: anywhere;
+}
+.cue-text[hidden] { display: none; }
 .cursor { stroke: var(--accent); stroke-width: 2; }
 
 /* controls */
@@ -381,6 +443,8 @@ main {
 }
 .workout-bar .workout-info { flex: 1; min-width: 0; }
 .workout-bar .workout-name { font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.workout-bar .workout-description { margin: 2px 0 0; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.workout-description:empty { display: none; }
 .workout-bar .workout-meta { margin-top: 2px !important; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 body[data-state="running"] .workout-bar .button-link,
 body[data-state="paused"] .workout-bar .button-link { display: none; }
@@ -464,6 +528,15 @@ p.hint { margin: 0; line-height: 1.5; }
 .field input:invalid { border-color: var(--danger); }
 .field select { appearance: auto; }
 
+.zone-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
+.zone-field span { display: inline-flex; align-items: center; gap: 8px; }
+.swatch { display: inline-block; flex: none; width: 12px; height: 12px; border-radius: 3px; }
+.hr-swatch-1 { background: var(--hr1); }
+.hr-swatch-2 { background: var(--hr2); }
+.hr-swatch-3 { background: var(--hr3); }
+.hr-swatch-4 { background: var(--hr4); }
+.hr-swatch-5 { background: var(--hr5); }
+
 .visually-hidden {
     position: absolute;
     width: 1px;
@@ -541,6 +614,8 @@ p.hint { margin: 0; line-height: 1.5; }
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+.row-description:empty { display: none; }
+.row-description,
 .row-meta {
     font-size: 13px;
     color: var(--muted);

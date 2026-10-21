@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { cueTimes, cueAt, nextCue } from '../src/workout/cues.js';
+import { cueTimes, cueAt, nextCue, textAt } from '../src/workout/cues.js';
 import { builtins } from '../src/workout/builtin.js';
 
 const builtin = (name) => builtins.find((b) => b.name === name).workout;
@@ -66,4 +66,15 @@ test('nextCue', () => {
     assert.equal(nextCue([600, 1200], 0), 600);
     assert.equal(nextCue([600, 1200], 600), 1200);
     assert.equal(nextCue([600, 1200], 1250), undefined);
+});
+
+test('textAt shows a message for its duration, the latest one when they overlap', () => {
+    const texts = [{start: 0, duration: 10, text: 'a'}, {start: 5, duration: 3, text: 'b'}, {start: 20, duration: 5, text: 'c'}];
+    assert.equal(textAt(texts, 0), 'a');
+    assert.equal(textAt(texts, 6), 'b');
+    assert.equal(textAt(texts, 8.5), 'a');
+    assert.equal(textAt(texts, 10), undefined);
+    assert.equal(textAt(texts, 24.9), 'c');
+    assert.equal(textAt(texts, 25), undefined);
+    assert.equal(textAt([], 3), undefined);
 });
