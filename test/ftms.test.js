@@ -188,6 +188,25 @@ test('a trainer with both services is driven through the Elite service', async (
     assert.deepEqual(written, [[0x00, 0xc8, 0x00]]);
 });
 
+test('an Elite service without the brake falls through to FTMS', async () => {
+    const {server, written} = fakeServer({
+        ...ftmsLayout(),
+        [services.elite]: {[characteristics.eliteOutOfRange]: {}},
+    });
+    const link = await trainerSetup({onPower: () => {}, onOutOfRange: () => {}})(server);
+    assert.equal(link.protocol, 'FTMS');
+    await link.setTarget(200);
+    assert.deepEqual(written, [[0x00], [0x07], [0x05, 0xc8, 0x00]]);
+});
+
+test('an Elite service without the brake and no FTMS is refused', async () => {
+    const {server} = fakeServer({
+        [services.elite]: {[characteristics.eliteOutOfRange]: {}},
+        [services.cyclingPower]: {[characteristics.cyclingPowerMeasurement]: {}},
+    });
+    await assert.rejects(trainerSetup({onPower: () => {}, onOutOfRange: () => {}})(server), /no brake control/);
+});
+
 test('a trainer with neither service is refused', async () => {
     const {server} = fakeServer({[services.cyclingPower]: {[characteristics.cyclingPowerMeasurement]: {}}});
     await assert.rejects(trainerSetup({onPower: () => {}, onOutOfRange: () => {}})(server), /neither the Elite nor the FTMS/);

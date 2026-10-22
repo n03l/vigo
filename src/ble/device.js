@@ -16,10 +16,10 @@ import * as ftms from './ftms.js';
 export const isSupported = () => typeof navigator !== 'undefined' && !!navigator.bluetooth;
 
 export const pickers = Object.freeze({
-    // an Elite Rampa or any FTMS trainer
+    // an Elite Rampa or any FTMS trainer; a Drivo by name too, in case it doesn't advertise the Elite service
     trainer: {
-        filters: [{services: [services.elite]}, {services: [services.fitnessMachine]}],
-        optionalServices: [services.cyclingPower, services.speedCadence, services.deviceInfo],
+        filters: [{services: [services.elite]}, {services: [services.fitnessMachine]}, {namePrefix: 'Drivo'}, {namePrefix: 'DRIVO'}],
+        optionalServices: [services.elite, services.fitnessMachine, services.cyclingPower, services.speedCadence, services.deviceInfo],
     },
     heartRate: {
         filters: [{services: [services.heartRate]}],
@@ -291,9 +291,18 @@ async function optionalService(server, uuid) {
     }
 }
 
+// (BluetoothRemoteGATTService, String) -> BluetoothRemoteGATTCharacteristic | undefined
+async function optionalCharacteristic(service, uuid) {
+    try {
+        return await service.getCharacteristic(uuid);
+    } catch(error) {
+        if(error?.name === 'NotFoundError') return undefined;
+        throw error;
+    }
+}
+
 // Elite Rampa: data on Cycling Power, control on the Elite brake characteristic
-async function eliteLink(server, elite, {onPower, onOutOfRange}) {
-    const brake = await elite.getCharacteristic(characteristics.eliteBrake);
+async function eliteLink(server, elite, brake, {onPower, onOutOfRange}) {
     try {
         await subscribe(elite, characteristics.eliteOutOfRange, parseOutOfRange, onOutOfRange);
     } catch(error) {
@@ -404,15 +413,18 @@ async function ftmsLink(server, service, {onPower, onCadence, responseTimeout}) 
     });
 }
 
-// a Rampa is driven through the Elite service even if its firmware also has FTMS
+// a Rampa is driven through the Elite service even if its firmware also has FTMS; an Elite service
+// without the brake characteristic (other Elite models, untested) falls through to FTMS
 //
 // {onPower, onCadence, onOutOfRange} -> (BluetoothRemoteGATTServer) -> {protocol, setTarget, release}
 export function trainerSetup({onPower, onCadence = () => {}, onOutOfRange, responseTimeout = 3000}) {
     return async function(server) {
         const elite = await optionalService(server, services.elite);
-        if(elite) return eliteLink(server, elite, {onPower, onOutOfRange});
+        const brake = elite && await optionalCharacteristic(elite, characteristics.eliteBrake);
+        if(brake) return eliteLink(server, elite, brake, {onPower, onOutOfRange});
         const machine = await optionalService(server, services.fitnessMachine);
         if(machine) return ftmsLink(server, machine, {onPower, onCadence, responseTimeout});
+        if(elite) throw new Error('This trainer has the Elite service but no brake control, and no FTMS');
         throw new Error('This trainer has neither the Elite nor the FTMS control service');
     };
 }

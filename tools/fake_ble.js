@@ -2,7 +2,8 @@
 // speed/cadence sensor. Injected before the app loads; window.__ble records what the app writes.
 //
 // sessionStorage fakeble.trainer = "ftms" makes the trainer an FTMS one (KICKR-Fake) with Cycling
-// Power, "ftms-ibd" one without it that only sends Indoor Bike Data.
+// Power, "ftms-ibd" one without it that only sends Indoor Bike Data, "elite-ftms" (Drivo-Fake) one
+// with an Elite service that lacks the brake, plus FTMS and Cycling Power.
 //
 // Like Chrome with the Web Bluetooth flags on, devices picked once stay allowed across reloads
 // (kept in sessionStorage) and come back from getDevices(). Set window.__bleNoGetDevices before
@@ -28,8 +29,9 @@
     const storeGranted = () => { if(persist) store('fakeble.granted', [...granted]); };
     const available = load('fakeble.available', {trainer: true, hr: true, csc: true});
     const trainerKind = load('fakeble.trainer', 'rampa');
-    const isFtms = trainerKind.startsWith('ftms');
-    const names = load('fakeble.names', {trainer: isFtms ? 'KICKR-Fake' : 'RAMPA 12345', hr: 'HRM-Fake', csc: 'CSC-Fake'});
+    const isFtms = trainerKind.startsWith('ftms') || trainerKind === 'elite-ftms';
+    const trainerName = {rampa: 'RAMPA 12345', 'elite-ftms': 'Drivo-Fake'}[trainerKind] ?? 'KICKR-Fake';
+    const names = load('fakeble.names', {trainer: trainerName, hr: 'HRM-Fake', csc: 'CSC-Fake'});
 
     const ble = window.__ble = {writes: [], target: 0, connects: 0, requests: [], forgotten: [], watching: {}};
 
@@ -122,6 +124,7 @@
                     [powerRange]: {read: true, value: [0x00, 0x00, 0xd0, 0x07, 0x01, 0x00]}, // 0..2000 W
                 },
                 ...(trainerKind === 'ftms-ibd' ? {} : {[uuid('1818')]: {[uuid('2a63')]: {notify: true}}}),
+                ...(trainerKind === 'elite-ftms' ? {[elite]: {[outOfRange]: {notify: true}}} : {}),
             }
             : {
                 [elite]: {[brake]: {write: true}, [outOfRange]: {notify: true}},

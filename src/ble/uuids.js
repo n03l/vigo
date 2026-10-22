@@ -10,7 +10,7 @@ export const services = Object.freeze({
     heartRate:     base('180d'),
     deviceInfo:    base('180a'),
     fitnessMachine: base('1826'),
-    // Elite proprietary trainer control (Rampa)
+    // Elite proprietary trainer control (Rampa, maybe other Elite trainers of its generation)
     elite:         '347b0001-7635-408b-8918-8ff3949ce592',
 });
 

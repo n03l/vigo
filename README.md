@@ -17,7 +17,8 @@ use **Install app** or **Add to home screen** in Chrome's menu.
 
 - **A smart trainer: an Elite Rampa, or any trainer with Bluetooth FTMS.** vigo controls it in ERG mode
   over Bluetooth and reads power and cadence from it. FTMS ("Fitness Machine Service") is the standard
-  Bluetooth trainer control, which most current smart trainers have.
+  Bluetooth trainer control, which most current smart trainers have. Other Elite trainers of the Rampa's
+  generation, such as the first Drivo and Direto, probably work too, but haven't been tried.
 - **Optional: a Bluetooth heart rate strap.**
 - **Optional: a Bluetooth speed/cadence sensor.**
 

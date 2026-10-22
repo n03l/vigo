@@ -629,8 +629,10 @@ def run(out):
         shoot("settings-forgot-desktop")
         context.close()
 
-        # FTMS trainers: with Cycling Power, and with only Indoor Bike Data (cadence 92 from there)
-        for trainer, cadence in (("ftms", "90"), ("ftms-ibd", "92")):
+        # FTMS trainers: with Cycling Power, with only Indoor Bike Data (cadence 92 from there), and
+        # one with an Elite service that has no brake, which has to fall through to FTMS
+        for trainer, cadence, name in (("ftms", "90", "KICKR-Fake"), ("ftms-ibd", "92", "KICKR-Fake"),
+                                       ("elite-ftms", "90", "Drivo-Fake")):
             context = browser.new_context(viewport={"width": 1280, "height": 800})
             context.add_init_script(f"try {{ sessionStorage.setItem('fakeble.trainer', {json.dumps(json.dumps(trainer))}) }} catch(_) {{}}")
             context.add_init_script(path=str(REPO / "tools" / "fake_ble.js"))
@@ -642,7 +644,7 @@ def run(out):
             page.goto(URL + "#/settings")
             page.get_by_role("button", name="Register trainer", exact=True).click()
             expect_connected("trainer")
-            expect(device_row("trainer")).to_contain_text("KICKR-Fake")
+            expect(device_row("trainer")).to_contain_text(name)
             expect(device_row("trainer")).to_contain_text("connected · FTMS")
             assert brake_writes(page) == [[0x00]], brake_writes(page)  # control requested, nothing else yet
             shoot(f"settings-devices-{trainer}-desktop")

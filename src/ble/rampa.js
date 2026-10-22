@@ -8,6 +8,9 @@
 //     0x01 <uint8 level>      brake level 0..200
 // - 347b0011 out of range, notify uint8, 1 when the target can't be reached at this speed
 //
+// Other Elite Smart B+ trainers of the same years (Drivo, Direto) may use the same service; that is
+// untested, and one without 347b0010 is driven over FTMS instead (see trainerSetup).
+//
 
 export const maxPower = 4000;
 export const maxBrakeLevel = 200;
