@@ -5,9 +5,12 @@
 In ERG mode the trainer sets its resistance to hold the target power of each interval, whatever gear you're in
 or however fast you pedal. You ride the workout, and vigo tells the trainer what power to hold, second by second.
 
-Open it at **https://n03l.github.io/vigo/**. It works in Chrome or Edge on Android, Windows, macOS, Linux and
+Open it at **https://vigo-sigma.vercel.app/**. It works in Chrome or Edge on Android, Windows, macOS, Linux and
 ChromeOS. It doesn't work on iPhone or iPad, because Safari has no Web Bluetooth. To install vigo as an app,
 use **Install app** or **Add to home screen** in Chrome's menu.
+
+vigo used to be at https://n03l.github.io/vigo/. The browser keeps each address's data apart, so to bring your
+workouts and rides over, use **Settings → Backup → Download backup** there and **Restore backup** here.
 
 ![The ride screen, 22 minutes into a Sweet Spot workout: power, target, heart rate, cadence, interval and elapsed time above the workout profile with the power ridden so far](docs/screenshots/ride-desktop.png)
 
