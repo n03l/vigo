@@ -2,7 +2,7 @@
 // Service worker: network first so updates show up at once, cache as the offline fallback
 //
 
-const cacheName = 'vigo-v9';
+const cacheName = 'vigo-v10';
 const shell = [
     './',
     'index.html',
@@ -33,6 +33,7 @@ const shell = [
     'ui/dom.js',
     'ui/router.js',
     'version.json',
+    'workout/autopause.js',
     'workout/builtin.js',
     'workout/cues.js',
     'workout/hrzones.js',

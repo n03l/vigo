@@ -51,10 +51,14 @@ use **Install app** or **Add to home screen** in Chrome's menu.
    - **−** and **+** make the whole workout 5% easier or harder.
    - **Skip interval** jumps to the next interval.
    - **Pause** releases the resistance.
+   - **Settings → Auto-pause** pauses the workout after 5 or 10 seconds without pedaling, and resumes it as
+     soon as you pedal again. A pause from the **Pause** button waits for **Resume**.
+   - With **Settings → Start when I start pedaling**, **Start** waits for your first pedal strokes before the
+     clock and the trainer begin. **Cancel** stops waiting.
    - The chart draws the power you ride over the workout, with your heart rate (pink) and cadence (cyan)
      when those sensors are connected. Both use their own scale, 0 to 220 from the bottom to the top.
    - Before the power changes, vigo beeps for the last 5 seconds and the Interval tile counts down, so you
-     can shift in time. It chimes at the end of the workout and sounds an alarm if the trainer drops out.
+     can shift in time. It counts down the end of the workout the same way, then chimes and sounds an alarm if the trainer drops out.
      **Settings → Sounds** turns the sounds off; the countdown on screen stays.
    - If the trainer can't hold the target at your cadence, the Target tile says **Pedal faster**. Only
      the Rampa reports this, FTMS has no way to say so.

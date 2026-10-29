@@ -170,7 +170,21 @@
                     <input id="sound" type="checkbox" aria-describedby="sound-hint">
                     <span>Sounds</span>
                 </label>
-                <p class="hint" id="sound-hint">Beeps 5 seconds before each interval, a chime at the end, an alarm if the trainer drops.</p>
+                <p class="hint" id="sound-hint">Beeps 5 seconds before each interval and before the end, a chime at the end, an alarm if the trainer drops.</p>
+                <label class="field">
+                    <span>Auto-pause</span>
+                    <select id="auto-pause" aria-describedby="auto-pause-hint">
+                        <option value="0">Off</option>
+                        <option value="5">After 5 s without pedaling</option>
+                        <option value="10">After 10 s without pedaling</option>
+                    </select>
+                    <small class="hint" id="auto-pause-hint">Pauses the workout when you stop pedaling, resumes it when you pedal again.</small>
+                </label>
+                <label class="check">
+                    <input id="auto-start" type="checkbox" aria-describedby="auto-start-hint">
+                    <span>Start when I start pedaling</span>
+                </label>
+                <p class="hint" id="auto-start-hint">Start waits for your first pedal strokes before the clock and the trainer begin.</p>
                 <p id="settings-error" class="error" role="alert"></p>
             </div>
             <div class="card settings">

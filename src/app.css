@@ -116,7 +116,8 @@ button.danger { color: var(--danger); }
 
 /* a ride keeps you on the ride screen */
 body[data-state="running"] .tabs,
-body[data-state="paused"] .tabs { display: none; }
+body[data-state="paused"] .tabs,
+body[data-state="waiting"] .tabs { display: none; }
 
 .devices {
     display: flex;
@@ -146,7 +147,7 @@ body[data-state="paused"] .tabs { display: none; }
 
 @media (max-width: 639px) {
     body { padding-bottom: calc(64px + env(safe-area-inset-bottom)); }
-    body[data-state="running"], body[data-state="paused"] { padding-bottom: env(safe-area-inset-bottom); }
+    body[data-state="running"], body[data-state="paused"], body[data-state="waiting"] { padding-bottom: env(safe-area-inset-bottom); }
     .tabs {
         position: fixed;
         z-index: 10;
@@ -447,7 +448,8 @@ main {
 .workout-description:empty { display: none; }
 .workout-bar .workout-meta { margin-top: 2px !important; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 body[data-state="running"] .workout-bar .button-link,
-body[data-state="paused"] .workout-bar .button-link { display: none; }
+body[data-state="paused"] .workout-bar .button-link,
+body[data-state="waiting"] .workout-bar .button-link { display: none; }
 
 .button-link {
     display: inline-flex;
@@ -702,6 +704,10 @@ p.hint { margin: 0; line-height: 1.5; }
 @media (min-width: 900px), (orientation: landscape) and (min-width: 600px) {
     .tiles { grid-template-columns: repeat(6, minmax(0, 1fr)); }
     .tile-value { font-size: clamp(30px, 4.6vw, 72px); }
+    .workout-bar .workout-name { font-size: 20px; }
+    .workout-bar .workout-description,
+    .workout-bar .workout-meta { font-size: 16px; }
+    .cue-text { top: 14px; padding: 10px 20px; font-size: clamp(20px, 2vw, 28px); }
 }
 
 /* phone landscape: short screen, keep the chart visible */

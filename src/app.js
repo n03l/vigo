@@ -7,6 +7,7 @@ import { RevCounter } from './ble/revs.js';
 import { parseWorkout, limits as workoutLimits } from './workout/parse.js';
 import { targetAt, segmentIndexAt, toWatts, maxWatts, maxTargetFor } from './workout/target.js';
 import { Player } from './workout/player.js';
+import { PedalWatch } from './workout/autopause.js';
 import { cueTimes, cueAt, nextCue, countdown, textAt } from './workout/cues.js';
 import { defaultHrZones, validHrZones, hrZone, maxHrBounds } from './workout/hrzones.js';
 import { builtins } from './workout/builtin.js';
@@ -27,6 +28,7 @@ const legacyWorkoutKey = 'vigo.workout';
 const selectedKey = 'vigo.selected';
 const bounds = {ftp: [50, 600], wheel: [1000, 3000], bias: [-50, 50], maxHr: maxHrBounds};
 const inBounds = ([min, max], x) => Number.isInteger(x) && x >= min && x <= max;
+const autoPauseDelays = [0, 5, 10]; // seconds without pedaling, 0 is off
 
 // tyre size -> wheel circumference in mm (ETRTO tables, as used by bike computers)
 const wheelSizes = [
@@ -59,6 +61,8 @@ function loadSettings() {
         ftp: inBounds(bounds.ftp, saved.ftp) ? saved.ftp : 200,
         wheel: inBounds(bounds.wheel, saved.wheel) ? saved.wheel : 2105,
         sound: typeof saved.sound === 'boolean' ? saved.sound : true,
+        autoPause: autoPauseDelays.includes(saved.autoPause) ? saved.autoPause : 0,
+        autoStart: typeof saved.autoStart === 'boolean' ? saved.autoStart : false,
         maxHr,
         hrZones: validHrZones(saved.hrZones, maxHr) ? [...saved.hrZones] : defaultHrZones(maxHr),
     };
@@ -73,7 +77,10 @@ let player;
 let lastTarget;
 let lastSampleT = 0;
 let outOfRange = false;
-let autoPaused = false;
+let autoPaused = false;        // by a trainer drop, resumes when it reconnects
+let pausedForPedaling = false; // by auto-pause, resumes when the rider pedals
+let waitingToStart = false;    // Start pressed with auto-start on, the ride begins with the first pedal strokes
+let pedalWatch = PedalWatch({delay: 0});
 let wakeLock;
 let finishedRide;
 let store;
@@ -113,6 +120,10 @@ function averagePower(windowMs) {
     if(recent.length === 0) return undefined;
     return recent.reduce((sum, [, w]) => sum + w, 0) / recent.length;
 }
+
+// below this the rider isn't pedaling: power is the one reading every trainer has, cadence needs a sensor
+const pedalingWatts = 5;
+const pedaling = () => (averagePower(3000) ?? 0) >= pedalingWatts;
 
 function heartRate() {
     return now() - live.heartRateAt <= 5000 ? live.heartRate : undefined;
@@ -716,8 +727,21 @@ function begin() {
     lastTarget = undefined;
     lastSampleT = 0;
     autoPaused = false;
+    pausedForPedaling = false;
     chart.clearTraces();
     chart.progress(0);
+    if(settings.autoStart && !pedaling()) {
+        waitingToStart = true;
+        document.body.dataset.state = 'waiting';
+        keepAwake();
+        return render();
+    }
+    startRide();
+}
+
+function startRide() {
+    waitingToStart = false;
+    pedalWatch = PedalWatch({delay: settings.autoPause});
     recorder.start({
         t: nowSeconds(), workoutName: workout.name, ftp: settings.ftp,
         maxHr: settings.maxHr, hrZones: settings.hrZones, devices: connectedDevices(),
@@ -726,6 +750,31 @@ function begin() {
     cues = cueTimes(workout, settings.ftp);
     player = Player({workout, onTick, onState});
     player.start();
+}
+
+function cancelWaiting() {
+    waitingToStart = false;
+    document.body.dataset.state = player?.state ?? 'idle';
+    releaseWakeLock();
+    render();
+}
+
+// called from the render loop: auto-start and auto-pause
+function checkPedaling() {
+    const ready = connections.trainer.status === 'connected';
+    if(waitingToStart) {
+        if(ready && pedaling()) startRide();
+        return;
+    }
+    if(player?.state === 'running') {
+        if(pedalWatch.update(now() / 1000, pedaling()) !== 'stopped') return;
+        pausedForPedaling = true;
+        player.pause();
+    } else if(pausedForPedaling && player?.state === 'paused' && !autoPaused && ready) {
+        if(pedalWatch.update(now() / 1000, pedaling()) !== 'pedaling') return;
+        pausedForPedaling = false;
+        player.start();
+    }
 }
 
 function onTick(second) {
@@ -755,6 +804,7 @@ function onState(state) {
     if(state === 'running') {
         if(router?.current !== 'ride') router?.go('ride');
         recorder.resume(nowSeconds());
+        pedalWatch.reset(); // a Resume while still is given the full delay
         sendTarget(currentTarget(player.elapsed) ?? lastTarget, true);
         keepAwake();
     } else if(state === 'paused') {
@@ -765,6 +815,7 @@ function onState(state) {
         recorder.save();
         releaseWakeLock();
         autoPaused = false;
+        pausedForPedaling = false;
         removeBanner('trainer-lost');
         finishedRide = recorder.ride;
         // the end of the workout, not End
@@ -804,17 +855,15 @@ function trainerReady() {
 
 function onStartClick() {
     beeper.unlock(); // a click is the only place audio can be allowed
+    if(waitingToStart) return cancelWaiting();
     if(player?.state !== 'running' && !trainerReady()) return;
     removeBanner('no-trainer');
     if(!player || player.state === 'finished') return begin();
-    if(player.state === 'running') {
-        autoPaused = false;
-        return player.pause();
-    }
-    if(player.state === 'paused') {
-        autoPaused = false;
-        return player.start();
-    }
+    // a pause from the button stays until Resume
+    autoPaused = false;
+    pausedForPedaling = false;
+    if(player.state === 'running') return player.pause();
+    if(player.state === 'paused') return player.start();
 }
 
 // End opens the summary dialog with the ride so far: save it, discard it or keep riding.
@@ -826,6 +875,7 @@ function onEndClick() {
     if(!player || player.state === 'finished') return;
     // ended in the first second: nothing to save or lose
     if(recorder.ride.samples.length === 0) return player.finish();
+    pausedForPedaling = false;
     endingWasRunning = player.state === 'running';
     if(endingWasRunning) player.pause();
     showSummary(recorder.ride, 'ending');
@@ -1046,6 +1096,7 @@ const text = (id, value) => {
 const number = (x) => (Number.isFinite(x) ? String(Math.round(x)) : '--');
 
 function render() {
+    checkPedaling();
     const state = player?.state ?? 'idle';
     const elapsed = player?.elapsed ?? 0;
 
@@ -1076,8 +1127,9 @@ function render() {
             // the last seconds before the power jumps, whether or not sound is on
             const cue = state === 'running' ? nextCue(cues, elapsed) : undefined;
             const inCountdown = cue !== undefined && cue - elapsed <= countdown;
-            text('v-next', inCountdown ? `${number(currentTarget(cue))} W in ${Math.ceil(cue - elapsed)}`
-                : next ? `next ${nextWatts} W` : 'last interval');
+            const countdownText = cue >= workout.duration ? `end in ${Math.ceil(cue - elapsed)}`
+                : `${number(currentTarget(cue))} W in ${Math.ceil(cue - elapsed)}`;
+            text('v-next', inCountdown ? countdownText : next ? `next ${nextWatts} W` : 'last interval');
             $('tile-interval').classList.toggle('countdown', inCountdown);
         }
         text('v-remaining', `${formatDuration(workout.duration - elapsed)} left`);
@@ -1085,20 +1137,23 @@ function render() {
         text('v-interval', '--:--');
         text('v-next', ' ');
         text('v-remaining', ' ');
+        $('tile-interval').classList.remove('countdown');
     }
     text('v-elapsed', formatDuration(elapsed));
-    const message = workout && (state === 'running' || state === 'paused') ? textAt(workout.texts, elapsed) : undefined;
+    const message = waitingToStart ? 'Start pedaling to begin'
+        : pausedForPedaling && state === 'paused' ? 'Paused. Pedal to resume'
+        : workout && (state === 'running' || state === 'paused') ? textAt(workout.texts, elapsed) : undefined;
     text('cue-text', message ?? '');
     $('cue-text').hidden = message === undefined;
     if(player && state !== 'finished') chart.progress(elapsed);
 
     const riding = state === 'running' || state === 'paused';
-    text('btn-start', state === 'running' ? 'Pause' : state === 'paused' ? 'Resume' : 'Start');
-    $('btn-start').classList.toggle('primary', state !== 'running');
+    text('btn-start', waitingToStart ? 'Cancel' : state === 'running' ? 'Pause' : state === 'paused' ? 'Resume' : 'Start');
+    $('btn-start').classList.toggle('primary', state !== 'running' && !waitingToStart);
     $('btn-start').disabled = !workout;
     $('btn-skip').disabled = !riding;
     $('btn-end').disabled = !riding;
-    $('file').disabled = riding || !store;
+    $('file').disabled = riding || waitingToStart || !store;
 }
 
 // wiring
@@ -1127,6 +1182,8 @@ function init() {
     document.body.dataset.state = 'idle';
     $('ftp').value = settings.ftp;
     $('sound').checked = settings.sound;
+    $('auto-pause').value = String(settings.autoPause);
+    $('auto-start').checked = settings.autoStart;
     renderWheelSizes();
     renderHrZones();
 
@@ -1155,6 +1212,16 @@ function init() {
             beeper.unlock();
             beeper.count(); // what it sounds like
         }
+    });
+    $('auto-pause').addEventListener('change', (e) => {
+        const delay = Number(e.target.value);
+        if(!autoPauseDelays.includes(delay)) return;
+        settings.autoPause = delay;
+        writeStorage(settingsKey, settings);
+    });
+    $('auto-start').addEventListener('change', (e) => {
+        settings.autoStart = e.target.checked;
+        writeStorage(settingsKey, settings);
     });
     $('btn-start').addEventListener('click', onStartClick);
     $('btn-skip').addEventListener('click', () => player?.skip());
@@ -1195,7 +1262,7 @@ function init() {
 
     renderLibrary();
     router = Router({
-        canLeaveRide: () => !riding(),
+        canLeaveRide: () => !riding() && !waitingToStart,
         onChange: (view) => {
             if(!store) return;
             if(view === 'history') refreshHistory();

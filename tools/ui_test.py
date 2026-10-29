@@ -281,9 +281,9 @@ def run(out):
 
         # the ramp, then the end of the workout
         expect(page.locator("#summary")).to_be_visible(timeout=12000)
-        # go beeps at the changes, the alarm when the trainer dropped, the chime at the end
+        # go beeps at the changes, the alarm when the trainer dropped, a countdown to the end, then the chime
         assert 1320 in beeps(page) and 330 in beeps(page), beeps(page)
-        assert beeps(page)[-3:] == [660, 880, 1320], beeps(page)
+        assert beeps(page)[-5:] == [880, 880, 660, 880, 1320], beeps(page)
         expect(page.locator("#tile-interval")).not_to_have_class(re.compile(r"\bcountdown\b"))
         ramp = [t for t in targets(page) if t not in (125, 250, 263)]
         assert len(ramp) >= 2 and all(150 <= t <= 300 for t in ramp), targets(page)
@@ -693,6 +693,80 @@ def run(out):
             expect_connected("trainer")
             shoot(f"settings-devices-{trainer}-phone")
             context.close()
+
+        # auto-start waits for the first pedal strokes, auto-pause stops the clock when the rider stops
+        context = browser.new_context(viewport={"width": 1280, "height": 800})
+        context.add_init_script(FAKE_AUDIO)
+        context.add_init_script(path=str(REPO / "tools" / "fake_ble.js"))
+        page = context.new_page()
+        page.on("console", lambda m: m.type == "error" and errors.append(f"console: {m.text}"))
+        page.on("pageerror", lambda e: errors.append(f"pageerror: {e}\n{e.stack}"))
+        page.on("dialog", on_dialog)
+        body = page.locator("body")
+        page.goto(URL + "#/settings")
+        page.get_by_role("button", name="Register trainer", exact=True).click()
+        expect_connected("trainer")
+        page.select_option("#auto-pause", "5")
+        page.check("#auto-start")
+        saved = page.evaluate("JSON.parse(localStorage.getItem('vigo.settings'))")
+        assert saved["autoPause"] == 5 and saved["autoStart"] is True, saved
+        shoot("settings-auto-desktop")
+        page.set_viewport_size({"width": 390, "height": 844})
+        page.locator("#auto-start").scroll_into_view_if_needed()
+        page.screenshot(path=str(out / "settings-auto-phone.png"))
+        page.set_viewport_size({"width": 1280, "height": 800})
+        page.reload()
+        expect(page.locator("#auto-pause")).to_have_value("5")
+        expect(page.locator("#auto-start")).to_be_checked()
+        expect_connected("trainer")
+
+        page.evaluate("window.__ble.pedaling = false")
+        page.locator('[data-tab="ride"]').click()
+        page.wait_for_timeout(3200)  # the 3 s power average empties
+        page.click("#btn-start")
+        expect(body).to_have_attribute("data-state", "waiting")
+        expect(page.locator("#btn-start")).to_have_text("Cancel")
+        expect(page.locator("#cue-text")).to_have_text("Start pedaling to begin")
+        expect(page.locator(".tabs")).to_be_hidden()
+        page.wait_for_timeout(1000)
+        expect(page.locator("#v-elapsed")).to_have_text("0:00")
+        assert targets(page) == [], brake_writes(page)
+        page.screenshot(path=str(out / "waiting-desktop.png"))
+        page.set_viewport_size({"width": 390, "height": 844})
+        page.screenshot(path=str(out / "waiting-phone.png"))
+        page.set_viewport_size({"width": 1280, "height": 800})
+        # Cancel goes back, Start again waits again
+        page.click("#btn-start")
+        expect(body).to_have_attribute("data-state", "idle")
+        expect(page.locator("#btn-start")).to_have_text("Start")
+        page.click("#btn-start")
+        expect(body).to_have_attribute("data-state", "waiting")
+
+        page.evaluate("window.__ble.pedaling = true")
+        expect(body).to_have_attribute("data-state", "running", timeout=3000)
+        wait_until(page, "window.__ble.writes.some((w) => w[0] === 0)")
+
+        # 3 s for the power average to empty, then the 5 s delay
+        page.evaluate("window.__ble.pedaling = false")
+        expect(body).to_have_attribute("data-state", "paused", timeout=12000)
+        expect(page.locator("#btn-start")).to_have_text("Resume")
+        expect(page.locator("#cue-text")).to_have_text("Paused. Pedal to resume")
+        page.wait_for_timeout(200)
+        assert brake_writes(page)[-1] == [0x01, 0x00], brake_writes(page)[-3:]
+        page.evaluate("window.__ble.pedaling = true")
+        expect(body).to_have_attribute("data-state", "running", timeout=3000)
+        page.wait_for_timeout(300)
+        assert brake_writes(page)[-1][0] == 0, brake_writes(page)[-3:]
+
+        # a pause from the button stays, even while pedaling
+        page.click("#btn-start")
+        expect(body).to_have_attribute("data-state", "paused")
+        page.wait_for_timeout(1500)
+        expect(body).to_have_attribute("data-state", "paused")
+        expect(page.locator("#cue-text")).not_to_have_text("Paused. Pedal to resume")
+        page.click("#btn-end")
+        page.get_by_role("button", name="Discard ride").click()
+        context.close()
 
         browser.close()
 

@@ -3,6 +3,8 @@
 //
 // A cue is a segment start where the power jumps, by at least 5% of FTP. Ramps and point by point
 // files are many segments that continue each other, a beep at every one of them would be noise.
+// The end of the workout is a cue too, so the last seconds are counted down before the finish chime.
+// The player's last tick is the second before the end, so the end never gets a 'go'.
 //
 
 import { toWatts } from './target.js';
@@ -10,7 +12,7 @@ import { toWatts } from './target.js';
 export const countdown = 5;    // seconds of countdown before a cue
 const minJump = 0.05;          // of FTP
 
-// (Workout, Number) -> [Number], sorted start times in seconds, none at 0
+// (Workout, Number) -> [Number], sorted start times in seconds and the end, none at 0
 export function cueTimes(workout, ftp) {
     const times = [];
     const segments = workout.segments;
@@ -19,6 +21,7 @@ export function cueTimes(workout, ftp) {
         const after = toWatts(workout, segments[i].from, ftp);
         if(segments[i].start > 0 && Math.abs(after - before) >= minJump * ftp - 1e-9) times.push(segments[i].start);
     }
+    if(workout.duration > 0 && times.at(-1) !== workout.duration) times.push(workout.duration);
     return times;
 }
 

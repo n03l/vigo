@@ -5,6 +5,9 @@
 // Power, "ftms-ibd" one without it that only sends Indoor Bike Data, "elite-ftms" (Drivo-Fake) one
 // with an Elite service that lacks the brake, plus FTMS and Cycling Power.
 //
+// window.__ble.pedaling = false stops the rider: crank and wheel counts stop and power is 0. Pedaling
+// with no target (before the start, while paused) gives 40 W, like a released brake.
+//
 // Like Chrome with the Web Bluetooth flags on, devices picked once stay allowed across reloads
 // (kept in sessionStorage) and come back from getDevices(). Set window.__bleNoGetDevices before
 // this script to get Chrome without the flags, or window.__bleNoPersist for the experimental flag
@@ -33,7 +36,7 @@
     const trainerName = {rampa: 'RAMPA 12345', 'elite-ftms': 'Drivo-Fake'}[trainerKind] ?? 'KICKR-Fake';
     const names = load('fakeble.names', {trainer: trainerName, hr: 'HRM-Fake', csc: 'CSC-Fake'});
 
-    const ble = window.__ble = {writes: [], target: 0, connects: 0, requests: [], forgotten: [], watching: {}};
+    const ble = window.__ble = {writes: [], target: 0, connects: 0, requests: [], forgotten: [], watching: {}, pedaling: true};
 
     class Characteristic extends EventTarget {
         constructor(id, properties = {notify: true}) {
@@ -175,14 +178,19 @@
         return [count, Math.floor(count / rate * resolution)];
     };
 
+    // seconds pedaled, the revolution counts only move while pedaling
+    let s = 0;
+    let lastAt = t0;
     setInterval(() => {
-        const s = (performance.now() - t0) / 1000;
+        const at = performance.now();
+        if(ble.pedaling) s += (at - lastAt) / 1000;
+        lastAt = at;
         if(trainer.gatt.connected) {
             const [cr, ct] = revs(1.5, s, 1024);
-            const power = ble.target ? ble.target + (Math.round(s) % 3) - 1 : 0;
+            const power = !ble.pedaling ? 0 : ble.target ? ble.target + (Math.round(s) % 3) - 1 : 40;
             trainer.char(uuid('2a63'))?.emit([0x20, 0x00, ...u16(power), ...u16(cr & 0xffff), ...u16(ct & 0xffff)]);
             // more data (no speed), cadence 92 rpm in 0.5 rpm, power
-            trainer.char(bikeData)?.emit([0x45, 0x00, ...u16(184), ...u16(power)]);
+            trainer.char(bikeData)?.emit([0x45, 0x00, ...u16(ble.pedaling ? 184 : 0), ...u16(power)]);
         }
         if(hr.gatt.connected) hr.char(uuid('2a37'))?.emit([0x00, 140]);
         if(csc.gatt.connected) {
