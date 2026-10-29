@@ -9,9 +9,6 @@ Open it at **https://vigo-sigma.vercel.app/**. It works in Chrome or Edge on And
 ChromeOS. It doesn't work on iPhone or iPad, because Safari has no Web Bluetooth. To install vigo as an app,
 use **Install app** or **Add to home screen** in Chrome's menu.
 
-vigo used to be at https://n03l.github.io/vigo/. The browser keeps each address's data apart, so to bring your
-workouts and rides over, use **Settings → Backup → Download backup** there and **Restore backup** here.
-
 ![The ride screen, 22 minutes into a Sweet Spot workout: power, target, heart rate, cadence, interval and elapsed time above the workout profile with the power ridden so far](docs/screenshots/ride-desktop.png)
 
 ![The Workouts page with the seven built-in workouts](docs/screenshots/workouts-desktop.png)
