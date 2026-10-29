@@ -219,6 +219,19 @@
                 <p class="hint">The heart rate on the ride screen takes the colour of its zone.</p>
                 <p id="hr-error" class="error" role="alert"></p>
             </div>
+            <div class="card settings">
+                <h2 class="card-title">Backup</h2>
+                <p class="hint">One file with your settings, uploaded workouts and ride history. Restoring adds them to what is here and replaces the settings; registered devices are not included.</p>
+                <div class="backup-actions">
+                    <button type="button" id="btn-backup">Download backup</button>
+                    <label class="upload">
+                        Restore backup
+                        <input id="restore-file" class="visually-hidden" type="file" accept=".json,application/json">
+                    </label>
+                </div>
+                <p id="backup-status" class="hint" role="status"></p>
+                <p id="backup-error" class="error" role="alert"></p>
+            </div>
         </section>
     </main>
 

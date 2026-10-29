@@ -15,7 +15,7 @@ the user documentation; keep it in step with user-visible changes.
   `target.js` gives the target power at a time, `player.js` is the workout clock, `builtin.js` the built-ins,
   `cues.js` the interval countdowns and [COURSE TEXT] messages, `hrzones.js` the heart rate zones.
 - `src/record/`: the per-second `recorder.js` with autosave, and the `fit.js` FIT encoder.
-- `src/store/`: IndexedDB (`db.js`), the workout library, saved devices.
+- `src/store/`: IndexedDB (`db.js`), the workout library, saved devices, the backup file (`backup.js`).
 - `src/ui/`: `dom.js` (`$`, `el`), the SVG `chart.js`, the hash `router.js`.
 - `test/`: node unit tests and `fixtures/` (including a hostile workout name).
 - `tools/`: `serve.py` dev server, `ui_test.py` end to end test, `fake_ble.js` fake Web Bluetooth,

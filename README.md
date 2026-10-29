@@ -71,6 +71,13 @@ use **Install app** or **Add to home screen** in Chrome's menu.
 
 If a device drops out during a ride, vigo pauses the workout, reconnects, and carries on by itself.
 
+## Backup
+
+Everything vigo keeps stays in your browser. **Settings → Backup → Download backup** saves your settings,
+uploaded workouts and ride history in one file. **Restore backup** loads such a file, on the same browser or
+a new one: the workouts and rides are added to what is there and the settings are replaced. Registered
+devices are not in the backup, register them again on a new browser.
+
 ## Connecting automatically: Chrome's experimental features
 
 Out of the box, Chrome makes every website ask before using a Bluetooth device. So each time you open vigo,

@@ -565,6 +565,10 @@ p.hint { margin: 0; line-height: 1.5; }
 }
 .upload:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
 .upload:has(input:disabled) { opacity: 0.4; cursor: default; }
+.backup-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.backup-actions > * { flex: 1 1 160px; }
+.backup-actions .upload { justify-content: center; }
+#backup-status:empty, #backup-error:empty { display: none; }
 
 .workout-info p { margin: 0; }
 .workout-name { font-size: 18px; font-weight: 650; overflow-wrap: anywhere; }

@@ -25,6 +25,7 @@ const shell = [
     'ble/uuids.js',
     'record/fit.js',
     'record/recorder.js',
+    'store/backup.js',
     'store/db.js',
     'store/devices.js',
     'store/library.js',

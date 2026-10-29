@@ -16,6 +16,7 @@ import { encodeActivity, summarize } from './record/fit.js';
 import { openStore } from './store/db.js';
 import { kinds as deviceKinds, loadDeviceConfig, saveDeviceConfig, rememberDevice, unregisterDevice, pickerFor } from './store/devices.js';
 import { workoutId, fromRecord, mergeLibrary, describe } from './store/library.js';
+import { makeBackup, readBackup, backupFileName, maxBytes as maxBackupBytes } from './store/backup.js';
 import { WorkoutChart, drawProfile } from './ui/chart.js';
 import { Beeper } from './ui/sound.js';
 import { Router } from './ui/router.js';
@@ -54,8 +55,9 @@ function writeStorage(key, value) {
     try { localStorage.setItem(key, JSON.stringify(value)); } catch(error) { console.warn('vigo: storage', error); }
 }
 
-function loadSettings() {
-    const saved = readStorage(settingsKey) ?? {};
+// stored or restored settings -> settings, a missing or bad value takes its default
+function sanitizeSettings(saved) {
+    if(typeof saved !== 'object' || saved === null) saved = {};
     const maxHr = inBounds(bounds.maxHr, saved.maxHr) ? saved.maxHr : 190;
     return {
         ftp: inBounds(bounds.ftp, saved.ftp) ? saved.ftp : 200,
@@ -67,6 +69,8 @@ function loadSettings() {
         hrZones: validHrZones(saved.hrZones, maxHr) ? [...saved.hrZones] : defaultHrZones(maxHr),
     };
 }
+
+const loadSettings = () => sanitizeSettings(readStorage(settingsKey));
 
 // state
 
@@ -588,6 +592,13 @@ function renderLibrary() {
 
 // (String, String) -> Promise, add an upload to the library, or refresh it if it's there already
 async function addWorkout(text, fileName) {
+    const id = await storeWorkout(text, fileName);
+    await refreshLibrary();
+    selectWorkout(id);
+}
+
+// (String, String, {addedAt?, lastUsedAt?}) -> Promise<String>, the id; an upload is used now
+async function storeWorkout(text, fileName, {addedAt, lastUsedAt} = {}) {
     const workout = parseWorkout(text, {fileName});
     const id = await workoutId(text);
     const existing = await store.get('workouts', id).catch(() => undefined);
@@ -597,11 +608,10 @@ async function addWorkout(text, fileName) {
         name: workout.name,
         fileName: String(fileName).slice(0, 200),
         text,
-        addedAt: Number.isFinite(existing?.addedAt) ? existing.addedAt : now,
-        lastUsedAt: now,
+        addedAt: Number.isFinite(existing?.addedAt) ? existing.addedAt : addedAt ?? now,
+        lastUsedAt: Math.max(lastUsedAt ?? now, Number.isFinite(existing?.lastUsedAt) ? existing.lastUsedAt : 0),
     });
-    await refreshLibrary();
-    selectWorkout(id);
+    return id;
 }
 
 async function deleteWorkout(entry) {
@@ -1051,6 +1061,71 @@ async function deleteRide(id, name) {
     await refreshHistory();
 }
 
+// backup and restore
+
+async function downloadBackup() {
+    $('backup-error').textContent = '';
+    $('backup-status').textContent = '';
+    try {
+        const workouts = (await store.getAll('workouts')).filter((w) => typeof w?.text === 'string');
+        const metas = new Map((await store.getAll('rides')).map((r) => [r?.id, r]));
+        const rides = (await store.getAll('rideData'))
+            .filter((r) => typeof r?.id === 'string')
+            .map(({id, ...packed}) => ({interrupted: metas.get(id)?.interrupted === true, ...packed}));
+        const json = JSON.stringify(makeBackup({settings, workouts, rides}));
+        const url = URL.createObjectURL(new Blob([json], {type: 'application/json'}));
+        const a = el('a', {href: url, download: backupFileName()});
+        document.body.append(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 10000);
+        $('backup-status').textContent = `Saved ${count(workouts.length, 'workout')} and ${count(rides.length, 'ride')}.`;
+    } catch(error) {
+        $('backup-error').textContent = `Backup failed: ${error.message}`;
+    }
+}
+
+const count = (n, noun) => `${n} ${noun}${n === 1 ? '' : 's'}`;
+
+async function onRestoreFile(event) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if(!file) return;
+    $('backup-error').textContent = '';
+    $('backup-status').textContent = '';
+    if(riding() || waitingToStart) {
+        $('backup-error').textContent = 'End the ride before restoring a backup.';
+        return;
+    }
+    try {
+        if(file.size > maxBackupBytes) throw new Error('The file is too large to be a vigo backup.');
+        const backup = readBackup(await file.text());
+        const what = [count(backup.workouts.length, 'workout'), count(backup.rides.length, 'ride')];
+        const message = `Restore ${what.join(' and ')}${backup.settings ? ' and the settings' : ''} from ${file.name}? `
+            + 'They are added to what is here; workouts and rides already here are kept.';
+        if(!confirm(message)) return;
+        for(const w of backup.workouts) {
+            await storeWorkout(w.text, w.fileName, {addedAt: w.addedAt, lastUsedAt: w.lastUsedAt});
+        }
+        for(const {ride, interrupted} of backup.rides) await saveRide(ride, {interrupted});
+        if(backup.settings) restoreSettings(backup.settings);
+        await refreshLibrary();
+        await refreshHistory();
+        const skipped = backup.skipped
+            ? ` ${backup.skipped} damaged ${backup.skipped === 1 ? 'entry was' : 'entries were'} skipped.` : '';
+        $('backup-status').textContent = `Restored ${what.join(' and ')}.${skipped}`;
+    } catch(error) {
+        $('backup-error').textContent = `Could not restore ${file.name}: ${error.message}`;
+    }
+}
+
+function restoreSettings(saved) {
+    Object.assign(settings, sanitizeSettings(saved));
+    writeStorage(settingsKey, settings);
+    showSettings();
+    drawWorkout();
+}
+
 // banners
 
 function banner(id, kind, text, actions = []) {
@@ -1154,6 +1229,8 @@ function render() {
     $('btn-skip').disabled = !riding;
     $('btn-end').disabled = !riding;
     $('file').disabled = riding || waitingToStart || !store;
+    $('btn-backup').disabled = !store;
+    $('restore-file').disabled = riding || waitingToStart || !store;
 }
 
 // wiring
@@ -1168,6 +1245,16 @@ function framed() {
     }
 }
 
+// the settings into their inputs
+function showSettings() {
+    $('ftp').value = settings.ftp;
+    $('sound').checked = settings.sound;
+    $('auto-pause').value = String(settings.autoPause);
+    $('auto-start').checked = settings.autoStart;
+    renderWheelSizes();
+    renderHrZones();
+}
+
 function refuseFramed() {
     const open = el('a', {href: location.href, target: '_top', rel: 'noopener'}, 'Open vigo');
     document.body.replaceChildren(el('main', {class: 'page'}, [
@@ -1180,12 +1267,7 @@ function refuseFramed() {
 function init() {
     if(framed()) return refuseFramed();
     document.body.dataset.state = 'idle';
-    $('ftp').value = settings.ftp;
-    $('sound').checked = settings.sound;
-    $('auto-pause').value = String(settings.autoPause);
-    $('auto-start').checked = settings.autoStart;
-    renderWheelSizes();
-    renderHrZones();
+    showSettings();
 
     if(!isSupported()) {
         banner('no-ble', 'error', 'This browser has no Web Bluetooth. Use Chrome or Edge on a laptop or on Android.');
@@ -1223,6 +1305,8 @@ function init() {
         settings.autoStart = e.target.checked;
         writeStorage(settingsKey, settings);
     });
+    $('btn-backup').addEventListener('click', downloadBackup);
+    $('restore-file').addEventListener('change', onRestoreFile);
     $('btn-start').addEventListener('click', onStartClick);
     $('btn-skip').addEventListener('click', () => player?.skip());
     $('btn-end').addEventListener('click', onEndClick);

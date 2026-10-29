@@ -381,6 +381,21 @@ def run(out):
         expect(history.first).to_contain_text(hostile)
         assert page.locator("img").count() == 0
 
+        # backup: settings, uploads and rides in one file
+        tab("settings")
+        with page.expect_download() as info:
+            page.click("#btn-backup")
+        backup_path = out / "backup.json"
+        info.value.save_as(backup_path)
+        backup = json.loads(backup_path.read_text())
+        assert backup["format"] == "vigo-backup" and backup["version"] == 1, backup.keys()
+        ride_count = history.count()
+        assert len(backup["rides"]) == ride_count and ride_count >= 2, (len(backup["rides"]), ride_count)
+        assert any(hostile in w["text"] for w in backup["workouts"]), [w["fileName"] for w in backup["workouts"]]
+        assert "devices" not in backup
+        expect(page.locator("#backup-status")).to_contain_text(f"{ride_count} rides")
+        upload_count = len(backup["workouts"])
+
         # a bad file shows an error and keeps the previous workout
         tab("workouts")
         page.set_input_files("#file", files=[{"name": "bad.mrc", "mimeType": "text/plain",
@@ -704,6 +719,24 @@ def run(out):
         page.on("dialog", on_dialog)
         body = page.locator("body")
         page.goto(URL + "#/settings")
+
+        # restore the backup into this empty browser, a non-backup file is refused
+        (out / "not-a-backup.json").write_text('{"hello": 1}')
+        page.set_input_files("#restore-file", str(out / "not-a-backup.json"))
+        expect(page.locator("#backup-error")).to_contain_text("not a vigo backup")
+        page.set_input_files("#restore-file", str(backup_path))
+        expect(page.locator("#backup-status")).to_contain_text(f"Restored {upload_count} workout")
+        assert any(m.startswith("Restore ") for _, m in dialogs[-1:]), dialogs[-1:]
+        expect(page.locator("#ftp")).to_have_value(str(backup["settings"]["ftp"]))
+        shoot("settings-backup-desktop")
+        page.locator('[data-tab="history"]').click()
+        expect(page.locator("#history-list li")).to_have_count(ride_count)
+        expect(page.locator("#history-list li").first).to_contain_text(hostile)
+        assert page.locator("img").count() == 0
+        page.locator('[data-tab="workouts"]').click()
+        expect(page.locator("#workout-list")).to_contain_text(hostile)
+        page.locator('[data-tab="settings"]').click()
+
         page.get_by_role("button", name="Register trainer", exact=True).click()
         expect_connected("trainer")
         page.select_option("#auto-pause", "5")
