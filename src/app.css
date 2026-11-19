@@ -101,7 +101,7 @@ button.danger { color: var(--danger); }
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    min-height: 36px;
+    min-height: 44px;
     padding: 0 12px;
     border-radius: 10px;
     color: var(--muted);
@@ -130,7 +130,7 @@ body[data-state="waiting"] .tabs { display: none; }
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    min-height: 36px;
+    min-height: 44px;
     padding: 0 12px;
     font-size: 14px;
     max-width: 100%;
@@ -178,19 +178,34 @@ body[data-state="waiting"] .tabs { display: none; }
 }
 
 .dot {
-    width: 9px;
-    height: 9px;
+    width: 10px;
+    height: 10px;
     border-radius: 50%;
-    background: var(--muted);
+    border: 2px solid var(--muted);
+    background: transparent;
     flex: none;
 }
-.device[data-status="connected"] .dot { background: var(--ok); }
+/* connected: filled; disconnected: an empty ring; on the way: a turning ring with a gap */
+.device[data-status="connected"] .dot,
+.device-row[data-status="connected"] .dot { background: var(--ok); border-color: var(--ok); }
 .device[data-status="connecting"] .dot,
 .device[data-status="searching"] .dot,
-.device[data-status="reconnecting"] .dot { background: var(--warn); animation: pulse 1s ease-in-out infinite; }
+.device[data-status="reconnecting"] .dot,
+.device-row[data-status="connecting"] .dot,
+.device-row[data-status="searching"] .dot,
+.device-row[data-status="reconnecting"] .dot {
+    border-color: var(--warn);
+    border-top-color: transparent;
+    animation: spin 0.9s linear infinite;
+}
 
-@keyframes pulse { 50% { opacity: 0.3; } }
+@keyframes spin { to { transform: rotate(1turn); } }
 @media (prefers-reduced-motion: reduce) { .dot { animation: none !important; } }
+
+/* the repository link and build don't belong on screen mid ride */
+body[data-state="running"] .repo,
+body[data-state="paused"] .repo,
+body[data-state="waiting"] .repo { display: none; }
 
 /* main */
 
@@ -223,63 +238,109 @@ main {
 .banner.error { border-color: var(--danger); }
 .banner p { margin: 0; flex: 1 1 240px; }
 .banner .actions { display: flex; gap: 8px; }
+.banner .actions button.primary { order: -1; }
+body[data-state="running"] .banners,
+body[data-state="paused"] .banners,
+body[data-state="waiting"] .banners {
+    position: fixed;
+    z-index: 20;
+    top: calc(8px + env(safe-area-inset-top));
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(720px, calc(100% - 2 * var(--gutter)));
+}
+body[data-state="running"] .banner,
+body[data-state="paused"] .banner,
+body[data-state="waiting"] .banner { box-shadow: 0 8px 24px rgb(0 0 0 / 0.55); }
 
-/* tiles */
+/* tiles: time left in the interval and the target are read from 1-2 m away mid effort, so they lead;
+   power, heart rate, cadence and elapsed share one row below. Values size to their tile (cqi). */
 
 .tiles {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
     gap: 8px;
 }
 
 .tile {
+    container-type: inline-size;
     display: grid;
     grid-template-rows: auto 1fr auto;
-    padding: 8px 12px 10px;
-    border-radius: var(--radius);
-    background: var(--surface);
-    border: 1px solid var(--border);
     min-width: 0;
 }
 
-.tile-label {
-    font-size: clamp(13px, 3.4vw, 16px);
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--muted);
+.hero {
+    padding: 8px 14px 10px;
+    border-radius: var(--radius);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    transition: background-color 0.2s ease-out, border-color 0.2s ease-out;
 }
-.tile-label small { font-size: inherit; text-transform: none; opacity: 0.8; }
+
+.minor-row {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    border-radius: var(--radius);
+    background: var(--surface);
+    border: 1px solid var(--border);
+}
+.minor { padding: 6px 10px 8px; }
+.minor + .minor { border-left: 1px solid var(--border); }
+
+.tile-label {
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    white-space: nowrap;
+    overflow: hidden;
+}
+.tile-label .narrow { display: none; }
 
 .tile-value {
     font-family: var(--mono);
     font-variant-numeric: tabular-nums;
     font-weight: 700;
-    font-size: clamp(34px, 11vw, 64px);
-    line-height: 1.05;
+    line-height: 1;
+    letter-spacing: -0.02em;
     white-space: nowrap;
     overflow: hidden;
+    padding: 2px 0;
 }
+/* five characters (12:34) across the interval tile, four (1000) across the target tile */
+.tile-interval .tile-value { font-size: min(32cqi, 20vh, 184px); }
+.tile-target .tile-value { font-size: min(40cqi, 20vh, 184px); }
+.minor .tile-value { font-size: min(30cqi, 7vh, 64px); }
+/* an hour or more no longer fits five characters */
+.tile-value[data-long] { font-size: min(22cqi, 20vh, 184px); }
+.minor .tile-value[data-long] { font-size: min(21cqi, 7vh, 64px); }
 
 .tile-unit {
-    font-size: clamp(14px, 3.8vw, 19px);
+    font-size: 14px;
     color: var(--muted);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
+.hero .tile-unit { font-size: clamp(15px, 2.6vh, 24px); font-weight: 600; }
 
-.tile-power .tile-value { color: var(--text); }
 .tile-target .tile-value { color: var(--accent); }
 #v-hr[data-zone="1"] { color: var(--hr1); }
 #v-hr[data-zone="2"] { color: var(--hr2); }
 #v-hr[data-zone="3"] { color: var(--hr3); }
 #v-hr[data-zone="4"] { color: var(--hr4); }
 #v-hr[data-zone="5"] { color: var(--hr5); }
-.tile-target.out-of-range { border-color: var(--danger); }
-.tile-target.out-of-range .tile-unit { color: var(--danger); font-weight: 650; }
-.tile-interval.countdown { border-color: var(--accent); }
+.tile-target.out-of-range { border-color: var(--danger); background: rgb(242 85 90 / 0.12); }
+.tile-target.out-of-range .tile-unit { color: var(--danger); }
+/* the last seconds before the power changes: the whole tile turns, readable in peripheral vision */
+.tile-interval.countdown { border-color: var(--accent); background: var(--accent); }
+.tile-interval.countdown .tile-label,
 .tile-interval.countdown .tile-value,
-.tile-interval.countdown .tile-unit { color: var(--accent); font-weight: 650; }
+.tile-interval.countdown .tile-unit { color: var(--accent-text); }
+
+@media (prefers-reduced-motion: reduce) { .hero { transition: none; } }
 
 /* chart */
 
@@ -396,31 +457,39 @@ main {
 .cue-text[hidden] { display: none; }
 .cursor { stroke: var(--accent); stroke-width: 2; }
 
-/* controls */
+/* controls: start/pause and end in one group, the adjustments in another, so a thumb going for
+   Pause can't land on Skip */
 
 .controls {
     display: flex;
-    gap: 8px;
+    gap: 8px 24px;
     flex-wrap: wrap;
     align-items: center;
 }
-.controls > button { flex: 1 1 120px; min-height: 52px; font-size: 17px; }
+.control-group { display: flex; gap: 8px; align-items: center; flex: 1 1 300px; }
+.main-controls #btn-start { flex: 2 1 0; }
+.main-controls #btn-end { flex: 1 1 0; }
+.controls button { min-height: 52px; font-size: 17px; }
+.adjust-controls #btn-skip { flex: 1 1 0; }
+#btn-skip[data-armed] { border-color: var(--accent); color: var(--accent); }
 
 .bias {
     display: flex;
     align-items: center;
     gap: 4px;
-    flex: 1 1 160px;
+    flex: 1 1 0;
     justify-content: center;
 }
-.bias button { width: 52px; min-height: 52px; padding: 0; font-size: 22px; }
+.bias button { width: 52px; padding: 0; font-size: 22px; flex: none; }
+.bias-readout { display: grid; justify-items: center; min-width: 7ch; line-height: 1.1; }
 .bias-value {
-    min-width: 6ch;
-    text-align: center;
     font-family: var(--mono);
     font-variant-numeric: tabular-nums;
     font-size: 18px;
+    font-weight: 650;
 }
+.bias-label { font-size: 12px; color: var(--muted); }
+.bias[data-changed] .bias-value { color: var(--accent); }
 
 /* views */
 
@@ -470,14 +539,14 @@ main {
 .workout-bar .workout-description { margin: 2px 0 0; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .workout-description:empty { display: none; }
 .workout-bar .workout-meta { margin-top: 2px !important; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-body[data-state="running"] .workout-bar .button-link,
-body[data-state="paused"] .workout-bar .button-link,
-body[data-state="waiting"] .workout-bar .button-link { display: none; }
+body[data-state="running"] .workout-bar,
+body[data-state="paused"] .workout-bar,
+body[data-state="waiting"] .workout-bar { display: none; }
 
 .button-link {
     display: inline-flex;
     align-items: center;
-    min-height: 40px;
+    min-height: 44px;
     padding: 0 14px;
     border-radius: 10px;
     border: 1px solid var(--border);
@@ -520,12 +589,51 @@ p.hint { margin: 0; line-height: 1.5; }
 .device-row .row-text { flex: 1 1 180px; min-width: 0; }
 .device-row [data-role="status"] { white-space: normal; overflow-wrap: anywhere; }
 .device-row .row-title { display: flex; align-items: center; gap: 8px; }
-.device-row[data-status="connected"] .dot { background: var(--ok); }
-.device-row[data-status="connecting"] .dot,
-.device-row[data-status="searching"] .dot,
-.device-row[data-status="reconnecting"] .dot { background: var(--warn); animation: pulse 1s ease-in-out infinite; }
-.device-row .row-actions { display: flex; gap: 6px; flex-wrap: wrap; }
-.device-row .row-actions button { min-height: 40px; font-size: 14px; padding: 0 12px; }
+.device-row .row-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.device-row .row-actions button { min-height: 44px; font-size: 15px; padding: 0 14px; }
+.device-row .row-actions button.primary { min-width: 96px; }
+
+/* the less frequent device actions, out of the way */
+.more { position: relative; }
+.more > summary {
+    list-style: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    min-width: 44px;
+    padding: 0 12px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--text);
+    font-size: 15px;
+    cursor: pointer;
+}
+.more > summary::-webkit-details-marker { display: none; }
+.more > summary:hover { border-color: var(--muted); }
+.more > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.more[open] > summary { border-color: var(--muted); }
+.more-menu {
+    position: absolute;
+    z-index: 5;
+    right: 0;
+    top: calc(100% + 6px);
+    display: grid;
+    gap: 4px;
+    min-width: 180px;
+    padding: 6px;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    box-shadow: 0 8px 24px rgb(0 0 0 / 0.5);
+}
+.more-menu button { width: 100%; text-align: left; background: transparent; border-color: transparent; }
+.more-menu button:hover:not(:disabled) { background: var(--surface); border-color: var(--border); }
+
+.device-help summary { cursor: pointer; color: var(--text); font-size: 14px; min-height: 44px; display: flex; align-items: center; }
+.device-help summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+.device-help p { margin: 4px 0 0; }
 
 .check {
     display: flex;
@@ -576,7 +684,7 @@ p.hint { margin: 0; line-height: 1.5; }
 .upload {
     display: inline-flex;
     align-items: center;
-    min-height: 40px;
+    min-height: 44px;
     padding: 0 14px;
     border-radius: 10px;
     border: 1px solid var(--accent);
@@ -586,6 +694,8 @@ p.hint { margin: 0; line-height: 1.5; }
     cursor: pointer;
     white-space: nowrap;
 }
+.upload.quiet { border-color: var(--border); background: var(--surface-2); color: var(--text); font-size: 16px; font-weight: 400; }
+.upload.quiet:hover { border-color: var(--muted); }
 .upload:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
 .upload:has(input:disabled) { opacity: 0.4; cursor: default; }
 .backup-actions { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -698,7 +808,9 @@ p.hint { margin: 0; line-height: 1.5; }
 .repo-link {
     display: inline-flex;
     align-items: center;
-    min-height: 32px;
+    justify-content: center;
+    min-height: 44px;
+    min-width: 44px;
     color: var(--muted);
     text-decoration: none;
 }
@@ -710,7 +822,7 @@ p.hint { margin: 0; line-height: 1.5; }
 /* summary dialog */
 
 .summary {
-    width: min(440px, calc(100vw - 32px));
+    width: min(480px, calc(100vw - 32px));
     border: 1px solid var(--border);
     border-radius: var(--radius);
     background: var(--surface);
@@ -718,7 +830,22 @@ p.hint { margin: 0; line-height: 1.5; }
     padding: 20px;
 }
 .summary::backdrop { background: rgb(0 0 0 / 0.6); }
-.summary h2 { margin: 0 0 4px; }
+.summary h2 { margin: 0; font-size: 24px; font-weight: 750; text-wrap: balance; }
+.summary-name { margin: 4px 0 0; color: var(--muted); font-size: 16px; overflow-wrap: anywhere; }
+.summary-profile { margin: 16px 0 0; height: 72px; }
+.summary-profile svg { width: 100%; height: 100%; display: block; border-radius: 6px; }
+.summary-profile .profile-thumb { width: 100%; height: 100%; }
+.summary-progress { margin: 8px 0 0; font-size: 15px; font-weight: 600; }
+.summary-progress:empty { display: none; }
+.key-stats {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    margin: 16px 0 0;
+}
+.key-stats div { display: grid; gap: 2px; padding: 10px 12px; border-radius: 10px; background: var(--bg); }
+.key-stats dt { font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.key-stats dd { margin: 0; font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 28px; font-weight: 700; line-height: 1.1; }
 .stats {
     display: grid;
     grid-template-columns: auto 1fr;
@@ -727,16 +854,18 @@ p.hint { margin: 0; line-height: 1.5; }
 }
 .stats dt { color: var(--muted); }
 .stats dd { margin: 0; font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: right; }
+.summary-saved { margin: 0 0 16px; font-size: 15px; color: var(--muted); }
+.summary-saved:empty { display: none; }
+.summary-saved[data-ok] { color: var(--ok); font-weight: 600; }
+.summary-saved[data-ok]::before { content: "✓ "; }
 .dialog-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-.dialog-actions button { flex: 1 1 140px; }
+.dialog-actions button { flex: 1 1 140px; min-height: 48px; }
 
 /* larger screens */
 
 @media (min-width: 900px), (orientation: landscape) and (min-width: 600px) {
-    .tiles { grid-template-columns: repeat(6, minmax(0, 1fr)); }
-    .tile-value { font-size: clamp(30px, 4.6vw, 72px); }
-    .tile-label { font-size: clamp(13px, 1.2vw, 18px); }
-    .tile-unit { font-size: clamp(14px, 1.4vw, 21px); }
+    .tile-label { font-size: clamp(13px, 1.1vw, 17px); }
+    .minor .tile-unit { font-size: clamp(14px, 1.2vw, 18px); }
     .chart-axes { font-size: 13px; }
     .workout-bar .workout-name { font-size: 20px; }
     .workout-bar .workout-description,
@@ -744,9 +873,9 @@ p.hint { margin: 0; line-height: 1.5; }
     .cue-text { top: 14px; padding: 10px 20px; font-size: clamp(20px, 2vw, 28px); }
 }
 
-/* phone landscape: short screen, keep the chart visible */
+/* phone landscape: short screen, everything on one row above the chart */
 @media (orientation: landscape) and (max-height: 500px) {
-    .bar { padding: 6px var(--gutter); flex-wrap: nowrap; gap: 8px; }
+    .bar { padding: 4px var(--gutter); flex-wrap: nowrap; gap: 8px; }
     .tabs a { padding: 0 8px; }
     .device { padding: 0 10px; gap: 6px; }
     .device .wide, .device-name { display: none; }
@@ -754,10 +883,35 @@ p.hint { margin: 0; line-height: 1.5; }
     main, .view-ride { gap: 8px; }
     main { padding-top: 8px; }
     .workout-bar { display: none; }
-    .tile { padding: 6px 10px; }
-    .tile-value { font-size: clamp(26px, 5vw, 44px); }
-    .tile-label { font-size: 13px; }
-    .tile-unit { font-size: 14px; }
-    .chart-axes { font-size: 11px; }
-    .controls > button, .bias button { min-height: 44px; }
+    .tiles { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 3fr); }
+    .minor-row { grid-column: auto; }
+    .tile-interval .tile-value { font-size: min(32cqi, 18vh); }
+    .tile-target .tile-value { font-size: min(40cqi, 18vh); }
+    .minor .tile-value { font-size: min(30cqi, 12vh); }
+    .hero .tile-unit { font-size: 14px; }
+    .hero { padding: 6px 10px; }
+    .tile-label .wide { display: none; }
+    .tile-label .narrow { display: inline; }
+    .controls button { min-height: 44px; }
 }
+
+/* phone portrait: the two big numbers share the width evenly enough to be the same size, the four
+   others go two by two so their labels and units fit */
+@media (max-width: 639px) and (orientation: portrait) {
+    .tiles { grid-template-columns: minmax(0, 11fr) minmax(0, 9fr); }
+    .hero { padding: 8px 12px 10px; }
+    .hero .tile-unit { font-size: 15px; }
+    .minor-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .minor:nth-child(3) { border-left: none; }
+    .minor:nth-child(n + 3) { border-top: 1px solid var(--border); }
+    .minor { display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; column-gap: 8px; align-items: baseline; }
+    .minor .tile-label { grid-column: 1 / -1; }
+    .minor .tile-value { font-size: min(24cqi, 34px); }
+    .minor .tile-value[data-long] { font-size: min(18cqi, 30px); }
+}
+
+/* before and after a ride the big numbers step back, so the workout card and chart fit too */
+body[data-state="idle"] .tile-interval .tile-value,
+body[data-state="finished"] .tile-interval .tile-value { font-size: min(32cqi, 12vh, 120px); }
+body[data-state="idle"] .tile-target .tile-value,
+body[data-state="finished"] .tile-target .tile-value { font-size: min(40cqi, 12vh, 120px); }

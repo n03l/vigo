@@ -24,9 +24,11 @@ use **Install app** or **Add to home screen** in Chrome's menu.
 
 ## Using vigo
 
-1. **Register your devices** in **Settings → Devices**. Tap **Register** for the trainer, the heart rate
-   strap and the speed/cadence sensor, and pick each one in Chrome's Bluetooth list. You only do this once.
-   **Unregister** makes vigo forget a device.
+1. **Pair your devices** in **Settings → Devices**. Wake the trainer by pedaling a few strokes, tap **Pair**
+   for it, and pick it in Chrome's Bluetooth list. Do the same for the heart rate strap and the speed/cadence
+   sensor. You only do this once. **More** next to a paired device has **Pair another** and **Forget**.
+   - The buttons at the top of the screen show each device: a filled green dot when it's connected, an empty
+     ring when it isn't, and a turning ring while vigo connects or looks for it.
 2. **Set your FTP** in **Settings**, and pick your tyre size. The tyre size is used for speed and distance
    from the speed sensor.
    - **Heart rate zones**: enter your max heart rate and vigo sets the five zones to 50, 60, 70, 80 and 90%
@@ -49,9 +51,13 @@ use **Install app** or **Add to home screen** in Chrome's menu.
      such as FTP stay in capitals), and shows its `DESCRIPTION` line under the name.
    - Text messages in the file's `[COURSE TEXT]` section show over the chart at their time during the ride.
 4. **Ride.** Press **Start**.
-   - **−** and **+** make the whole workout 5% easier or harder.
-   - **Skip interval** jumps to the next interval.
+   - The two big numbers are the time left in the interval and the target power. Your power, heart rate,
+     cadence and elapsed time are in the row below.
+   - **−** and **+** make the whole workout 5% easier or harder. The percentage under **Intensity** turns
+     amber when it's not 100%.
+   - **Skip interval** jumps to the next interval. It takes two taps, so a stray one doesn't skip anything.
    - **Pause** releases the resistance.
+   - On a computer, **Space** starts, pauses and resumes, and the **↑** and **↓** keys change the intensity.
    - **Settings → Auto-pause** pauses the workout after 5 or 10 seconds without pedaling, and resumes it as
      soon as you pedal again. A pause from the **Pause** button waits for **Resume**.
    - With **Settings → Start when I start pedaling**, **Start** waits for your first pedal strokes before the
@@ -59,11 +65,13 @@ use **Install app** or **Add to home screen** in Chrome's menu.
    - The chart draws the power you ride over the workout, with your heart rate (pink) and cadence (cyan)
      when those sensors are connected. The power scale is on the left; heart rate (40 to 215 bpm) and cadence
      (0 to 175 rpm) have their own scales on the right, in their colours.
-   - Before the power changes, vigo beeps for the last 5 seconds and the Interval tile counts down, so you
+   - Before the power changes, vigo beeps for the last 5 seconds and the Interval tile turns amber and counts down, so you
      can shift in time. It counts down the end of the workout the same way, then chimes and sounds an alarm if the trainer drops out.
      **Settings → Sounds** turns the sounds off; the countdown on screen stays.
    - If the trainer can't hold the target at your cadence, the Target tile says **Pedal faster**. Only
      the Rampa reports this, FTMS has no way to say so.
+   - At the end, vigo shows the workout's profile, how much of it you rode, your normalized power,
+     intensity factor and TSS, and saves the ride to **History**.
 5. **Export.** Finished rides are listed in **History**, with a **.FIT** download you can upload to Strava,
    intervals.icu or Garmin Connect. A ride that was cut short, by closing the tab for example, is saved
    there too, marked "stopped early".
@@ -77,8 +85,8 @@ If a device drops out during a ride, vigo pauses the workout, reconnects, and ca
 
 Everything vigo keeps stays in your browser. **Settings → Backup → Download backup** saves your settings,
 uploaded workouts and ride history in one file. **Restore backup** loads such a file, on the same browser or
-a new one: the workouts and rides are added to what is there and the settings are replaced. Registered
-devices are not in the backup, register them again on a new browser.
+a new one: the workouts and rides are added to what is there and the settings are replaced. Paired
+devices are not in the backup, pair them again on a new browser.
 
 ## Google Drive
 
@@ -118,10 +126,10 @@ If a device is still off, vigo keeps looking for it until you switch it on.
    - The full address is `chrome://flags/#enable-web-bluetooth-new-permissions-backend`. It makes Chrome
      remember your devices after you restart the browser.
 4. Tap **Relaunch** at the bottom of the page. Chrome restarts.
-5. Open vigo. In **Settings → Devices**, register your devices once more.
+5. Open vigo. In **Settings → Devices**, pair your devices once more.
 
 The Devices section now starts with "Automatic: saved devices connect when vigo opens…". If it still says
-"One tap per device", the settings aren't on yet.
+"One tap per device", the settings aren't on yet. **How to make it automatic** under it lists both addresses.
 
 If you only enable the first setting, vigo still works: Chrome forgets the devices whenever vigo is
 reloaded or Chrome restarts, so it falls back to one tap per device, and **Settings → Devices** says which

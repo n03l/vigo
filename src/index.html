@@ -57,35 +57,37 @@
 
         <div class="view view-ride" data-view="ride">
             <section class="tiles" aria-label="Live data">
-                <div class="tile tile-power">
-                    <span class="tile-label">Power <small>3s</small></span>
-                    <span class="tile-value" id="v-power">--</span>
-                    <span class="tile-unit">W</span>
-                </div>
-                <div class="tile tile-target" id="tile-target">
-                    <span class="tile-label">Target</span>
-                    <span class="tile-value" id="v-target">--</span>
-                    <span class="tile-unit" id="v-target-note">W</span>
-                </div>
-                <div class="tile tile-hr">
-                    <span class="tile-label">Heart rate</span>
-                    <span class="tile-value" id="v-hr">--</span>
-                    <span class="tile-unit">bpm</span>
-                </div>
-                <div class="tile tile-cadence">
-                    <span class="tile-label">Cadence</span>
-                    <span class="tile-value" id="v-cadence">--</span>
-                    <span class="tile-unit" id="v-speed">rpm</span>
-                </div>
-                <div class="tile tile-interval" id="tile-interval">
+                <div class="tile hero tile-interval" id="tile-interval">
                     <span class="tile-label">Interval</span>
                     <span class="tile-value" id="v-interval">--:--</span>
                     <span class="tile-unit" id="v-next">&nbsp;</span>
                 </div>
-                <div class="tile tile-elapsed">
-                    <span class="tile-label">Elapsed</span>
-                    <span class="tile-value" id="v-elapsed">0:00</span>
-                    <span class="tile-unit" id="v-remaining">&nbsp;</span>
+                <div class="tile hero tile-target" id="tile-target">
+                    <span class="tile-label">Target</span>
+                    <span class="tile-value" id="v-target">--</span>
+                    <span class="tile-unit" id="v-target-note">W</span>
+                </div>
+                <div class="minor-row">
+                    <div class="tile minor tile-power">
+                        <span class="tile-label">Power</span>
+                        <span class="tile-value" id="v-power">--</span>
+                        <span class="tile-unit">W, 3 s</span>
+                    </div>
+                    <div class="tile minor tile-hr">
+                        <span class="tile-label"><span class="wide">Heart rate</span><span class="narrow">HR</span></span>
+                        <span class="tile-value" id="v-hr">--</span>
+                        <span class="tile-unit">bpm</span>
+                    </div>
+                    <div class="tile minor tile-cadence">
+                        <span class="tile-label">Cadence</span>
+                        <span class="tile-value" id="v-cadence">--</span>
+                        <span class="tile-unit" id="v-speed">rpm</span>
+                    </div>
+                    <div class="tile minor tile-elapsed">
+                        <span class="tile-label">Elapsed</span>
+                        <span class="tile-value" id="v-elapsed">0:00</span>
+                        <span class="tile-unit" id="v-remaining">&nbsp;</span>
+                    </div>
                 </div>
             </section>
 
@@ -110,14 +112,21 @@
             </section>
 
             <section class="controls" aria-label="Workout controls">
-                <button type="button" id="btn-start" class="primary" disabled>Start</button>
-                <button type="button" id="btn-skip" disabled>Skip interval</button>
-                <div class="bias" role="group" aria-label="Intensity">
-                    <button type="button" id="bias-down" aria-label="Easier by 5 percent">&minus;</button>
-                    <span id="bias" class="bias-value">100%</span>
-                    <button type="button" id="bias-up" aria-label="Harder by 5 percent">+</button>
+                <div class="control-group main-controls">
+                    <button type="button" id="btn-start" class="primary" disabled aria-keyshortcuts="Space">Start</button>
+                    <button type="button" id="btn-end" class="danger" disabled>End</button>
                 </div>
-                <button type="button" id="btn-end" class="danger" disabled>End</button>
+                <div class="control-group adjust-controls">
+                    <button type="button" id="btn-skip" disabled>Skip interval</button>
+                    <div class="bias" role="group" aria-labelledby="bias-label">
+                        <button type="button" id="bias-down" aria-label="Easier by 5 percent" aria-keyshortcuts="ArrowDown">&minus;</button>
+                        <span class="bias-readout">
+                            <span id="bias" class="bias-value">100%</span>
+                            <span id="bias-label" class="bias-label">Intensity</span>
+                        </span>
+                        <button type="button" id="bias-up" aria-label="Harder by 5 percent" aria-keyshortcuts="ArrowUp">+</button>
+                    </div>
+                </div>
             </section>
         </div>
 
@@ -221,10 +230,10 @@
             </div>
             <div class="card settings">
                 <h2 class="card-title">Backup</h2>
-                <p class="hint">One file with your settings, uploaded workouts and ride history. Restoring adds them to what is here and replaces the settings; registered devices are not included.</p>
+                <p class="hint">One file with your settings, uploaded workouts and ride history. Restoring adds them to what is here and replaces the settings; paired devices are not included.</p>
                 <div class="backup-actions">
-                    <button type="button" id="btn-backup">Download backup</button>
-                    <label class="upload">
+                    <button type="button" id="btn-backup" class="primary">Download backup</button>
+                    <label class="upload quiet">
                         Restore backup
                         <input id="restore-file" class="visually-hidden" type="file" accept=".json,application/json">
                     </label>
@@ -252,9 +261,12 @@
 
     <dialog id="summary" class="summary" aria-labelledby="summary-title">
         <h2 id="summary-title">Ride done</h2>
-        <p id="summary-name" class="workout-name"></p>
+        <p id="summary-name" class="summary-name"></p>
+        <div id="summary-profile" class="summary-profile" hidden></div>
+        <p id="summary-progress" class="summary-progress"></p>
+        <dl id="summary-key" class="key-stats" hidden></dl>
         <dl id="summary-stats" class="stats"></dl>
-        <p id="summary-saved" class="workout-meta"></p>
+        <p id="summary-saved" class="summary-saved" role="status"></p>
         <p id="summary-error" class="error" role="alert"></p>
         <div class="dialog-actions" id="ending-actions">
             <button type="button" id="btn-save" class="primary">Save ride</button>
@@ -262,8 +274,8 @@
             <button type="button" id="btn-discard" class="danger">Discard ride</button>
         </div>
         <div class="dialog-actions" id="done-actions">
-            <button type="button" id="btn-download" class="primary">Download .FIT</button>
-            <button type="button" id="btn-close">Close</button>
+            <button type="button" id="btn-close" class="primary">Done</button>
+            <button type="button" id="btn-download">Download .FIT</button>
         </div>
     </dialog>
 </body>

@@ -406,7 +406,7 @@ def run(out):
 
         def register_all():
             for kind, label in (("trainer", "trainer"), ("hr", "heart rate"), ("csc", "speed/cadence")):
-                page.get_by_role("button", name=f"Register {label}", exact=True).click()
+                page.locator("#device-list").get_by_role("button", name=f"Pair {label}", exact=True).click()
                 expect(page.locator(f"#dev-{kind}")).to_have_attribute("data-status", "connected")
 
         def expect_connected(*kinds, status="connected"):
@@ -487,7 +487,8 @@ def run(out):
 
         # start needs the trainer
         page.click("#btn-start")
-        expect(page.locator(".banner.error")).to_contain_text("No trainer is registered")
+        expect(page.locator(".banner.info")).to_contain_text("Pair your trainer first")
+        expect(page.locator(".banner.info").get_by_role("button", name="Pair trainer")).to_be_visible()
         expect(body).to_have_attribute("data-state", "idle")
         assert brake_writes(page) == [], brake_writes(page)
         shoot("no-trainer-desktop")
@@ -496,7 +497,7 @@ def run(out):
         page.click("#dev-trainer")
         expect(body).to_have_attribute("data-view", "settings")
         expect(page.locator("#device-mode")).to_contain_text("Automatic")
-        expect(device_row("trainer")).to_contain_text("Not registered")
+        expect(device_row("trainer")).to_contain_text("Not paired")
         register_all()
         expect(page.locator("#dev-trainer .device-name")).to_have_text("RAMPA 12345")
         expect(device_row("trainer")).to_contain_text("RAMPA 12345")
@@ -676,6 +677,11 @@ def run(out):
         expect(body).to_have_attribute("data-state", "running")
         page.wait_for_timeout(1200)
         expect(page.locator("#cue-text")).to_have_text(hostile)
+        # skip takes a second tap: the first only arms it
+        page.click("#btn-skip")
+        expect(page.locator("#btn-skip")).to_have_text("Tap again to skip")
+        page.click("#btn-skip")
+        expect(page.locator("#btn-skip")).to_have_text("Skip interval")
         page.click("#btn-skip")
         page.click("#btn-skip")
         expect(page.locator("#summary")).to_be_visible()
@@ -749,7 +755,8 @@ def run(out):
         expect_connected("trainer", status="reconnecting")
         page.wait_for_timeout(1500)
         page.evaluate("window.__ble.setAvailable('trainer', true, {advertise: false})")
-        page.get_by_role("button", name="Replace trainer").click()
+        device_row("trainer").locator(".more summary").click()
+        page.get_by_role("button", name="Pair another trainer").click()
         expect_connected("trainer")
         page.wait_for_timeout(12000)  # longer than the retry timeout
         expect_connected("trainer")
@@ -800,21 +807,22 @@ def run(out):
         # unregister the heart rate strap: disconnected, forgotten, not connected after a reload
         page.reload()
         expect_connected("trainer", "hr", "csc")
-        page.get_by_role("button", name="Unregister heart rate").click()
-        expect(device_row("hr")).to_contain_text("Not registered")
+        device_row("hr").locator(".more summary").click()
+        page.get_by_role("button", name="Forget heart rate").click()
+        expect(device_row("hr")).to_contain_text("Not paired")
         expect_connected("hr", status="disconnected")
         assert "hr" in page.evaluate("window.__ble.forgotten")
-        assert any("Unregister HRM-Fake?" in m for _, m in dialogs)
+        assert any("Forget HRM-Fake?" in m for _, m in dialogs)
         page.reload()
         expect_connected("trainer", "csc")
         page.wait_for_timeout(1000)
         expect_connected("hr", status="disconnected")
-        expect(page.get_by_role("button", name="Unregister heart rate")).to_be_hidden()
+        expect(page.get_by_role("button", name="Forget heart rate")).to_be_hidden()
 
         # a hostile device name is text
         page.evaluate(f"sessionStorage.setItem('fakeble.names', JSON.stringify({{trainer: 'RAMPA 12345', hr: {json.dumps(hostile)}, csc: 'CSC-Fake'}}))")
         page.reload()
-        page.get_by_role("button", name="Register heart rate", exact=True).click()
+        page.locator("#device-list").get_by_role("button", name="Pair heart rate", exact=True).click()
         expect(device_row("hr")).to_contain_text(hostile)
         assert page.locator("img").count() == 0
         page.set_viewport_size({"width": 390, "height": 844})
@@ -964,7 +972,7 @@ def run(out):
             page.on("dialog", on_dialog)
             body = page.locator("body")
             page.goto(URL + "#/settings")
-            page.get_by_role("button", name="Register trainer", exact=True).click()
+            page.locator("#device-list").get_by_role("button", name="Pair trainer", exact=True).click()
             expect_connected("trainer")
             expect(device_row("trainer")).to_contain_text(name)
             expect(device_row("trainer")).to_contain_text("connected · FTMS")
@@ -1044,7 +1052,7 @@ def run(out):
         expect(page.locator("#workout-list")).to_contain_text(hostile)
         page.locator('[data-tab="settings"]').click()
 
-        page.get_by_role("button", name="Register trainer", exact=True).click()
+        page.locator("#device-list").get_by_role("button", name="Pair trainer", exact=True).click()
         expect_connected("trainer")
         page.select_option("#auto-pause", "5")
         page.check("#auto-start")

@@ -2,7 +2,7 @@
 // Service worker: network first so updates show up at once, cache as the offline fallback
 //
 
-const cacheName = 'vigo-v12';
+const cacheName = 'vigo-v13';
 const shell = [
     './',
     'index.html',

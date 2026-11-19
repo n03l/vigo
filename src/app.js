@@ -247,7 +247,9 @@ function onDeviceStatus(kind, status) {
     button.dataset.status = status;
     button.querySelector('.device-name').textContent = statusText[status] ?? (status === 'connected' ? connection.name : '');
     const label = button.dataset.label;
-    button.title = `${label}: ${status}${connection.name ? ` (${connection.name})` : ''}`;
+    const state = status === 'connected' ? 'connected' : statusText[status]?.replace('…', '') ?? 'not connected';
+    button.title = `${label}: ${state}${connection.name ? ` (${connection.name})` : ''}`;
+    button.setAttribute('aria-label', button.title);
 
     renderDevices();
     if(offeringSaved) offerSavedDevices();
@@ -290,7 +292,8 @@ function connectError(kind, error) {
     // the user closed the picker
     if(error?.name === 'NotFoundError' && /cancel/i.test(error.message)) return;
     console.warn('vigo: connect failed', error);
-    banner(`ble-${kind}`, 'error', `Could not connect the ${deviceLabels[kind].toLowerCase()}: ${error?.message ?? error}`);
+    const what = deviceLabels[kind].toLowerCase();
+    banner(`ble-${kind}`, 'error', `Could not connect the ${what}. Check it's on and awake (pedal or wet the strap), then try again. (${error?.message ?? error})`);
 }
 
 function saveDevice(kind, device) {
@@ -342,7 +345,7 @@ async function connectSaved(kind) {
 async function unregisterKind(kind) {
     const saved = deviceConfig.devices[kind];
     if(!saved) return;
-    if(!confirm(`Unregister ${saved.name}? vigo will stop connecting to it.`)) return;
+    if(!confirm(`Forget ${saved.name}? vigo will stop connecting to it.`)) return;
     const connection = connections[kind];
     if(!connection.device) {
         // not used in this session, still revoke the browser's permission
@@ -389,21 +392,24 @@ function offerSavedDevices() {
 
 function renderDevices() {
     const auto = canAutoConnect();
+    const flags = (intro, names) => [
+        el('span', {}, intro),
+        el('details', {class: 'device-help'}, [
+            el('summary', {}, 'How to make it automatic'),
+            el('p', {}, [
+                el('span', {}, 'Open these Chrome settings, set them to Enabled, then restart Chrome: '),
+                ...names.flatMap((name, i) => [...(i ? [el('span', {}, ' and ')] : []), el('code', {}, name)]),
+                el('span', {}, '.'),
+            ]),
+        ]),
+    ];
     $('device-mode').replaceChildren(...(auto && chromeForgot
-        ? [
-            el('span', {}, 'Chrome forgot your devices since vigo was last opened, so each one needs a tap. To let Chrome remember them, also enable '),
-            el('code', {}, 'chrome://flags/#enable-web-bluetooth-new-permissions-backend'),
-            el('span', {}, ', then restart Chrome.'),
-        ]
+        ? flags('Chrome forgot your devices since vigo was last opened, so each one needs a tap.',
+            ['chrome://flags/#enable-web-bluetooth-new-permissions-backend'])
         : auto
         ? [el('span', {}, 'Automatic: saved devices connect when vigo opens and keep being searched for until they are on.')]
-        : [
-            el('span', {}, 'One tap per device. For fully automatic connection enable '),
-            el('code', {}, 'chrome://flags/#enable-experimental-web-platform-features'),
-            el('span', {}, ' and '),
-            el('code', {}, 'chrome://flags/#enable-web-bluetooth-new-permissions-backend'),
-            el('span', {}, ', then restart Chrome.'),
-        ]));
+        : flags('One tap per device to connect.',
+            ['chrome://flags/#enable-experimental-web-platform-features', 'chrome://flags/#enable-web-bluetooth-new-permissions-backend'])));
     $('auto-connect').checked = deviceConfig.autoConnect;
 
     const list = $('device-list');
@@ -422,8 +428,14 @@ function renderDevices() {
                 ]),
                 el('div', {class: 'row-actions'}, [
                     button('connect', 'Connect'),
-                    button('register', 'Register'),
-                    button('unregister', 'Unregister', {class: 'danger'}),
+                    button('register', 'Pair', {class: 'primary'}),
+                    el('details', {class: 'more'}, [
+                        el('summary', {'aria-label': `More for the ${deviceLabels[kind].toLowerCase()}`}, 'More'),
+                        el('div', {class: 'more-menu'}, [
+                            button('replace', 'Pair another'),
+                            button('unregister', 'Forget', {class: 'danger'}),
+                        ]),
+                    ]),
                 ]),
             ]);
         }));
@@ -435,7 +447,7 @@ function renderDevices() {
         const saved = deviceConfig.devices[kind];
         const status = connection.status;
         row.dataset.status = status;
-        row.querySelector('[data-role="saved"]').textContent = saved ? saved.name : 'Not registered';
+        row.querySelector('[data-role="saved"]').textContent = saved ? saved.name : 'Not paired';
         const state = status === 'disconnected' ? 'not connected'
             : status === 'connected' ? `connected${connection.name && connection.name !== saved?.name ? ` to ${connection.name}` : ''}`
                 + (connection.link?.protocol ? ` · ${connection.link.protocol}` : '')
@@ -449,17 +461,18 @@ function renderDevices() {
         connect.hidden = !saved && status === 'disconnected';
         connect.setAttribute('aria-label', `${connect.textContent} ${deviceLabels[kind].toLowerCase()}`);
         const register = row.querySelector('[data-action="register"]');
-        register.textContent = saved ? 'Replace' : 'Register';
-        register.setAttribute('aria-label', `${register.textContent} ${deviceLabels[kind].toLowerCase()}`);
-        const unregister = row.querySelector('[data-action="unregister"]');
-        unregister.hidden = !saved;
-        unregister.setAttribute('aria-label', `Unregister ${deviceLabels[kind].toLowerCase()}`);
+        register.hidden = Boolean(saved);
+        register.setAttribute('aria-label', `Pair ${deviceLabels[kind].toLowerCase()}`);
+        row.querySelector('.more').hidden = !saved;
+        row.querySelector('[data-action="replace"]').setAttribute('aria-label', `Pair another ${deviceLabels[kind].toLowerCase()}`);
+        row.querySelector('[data-action="unregister"]').setAttribute('aria-label', `Forget ${deviceLabels[kind].toLowerCase()}`);
         for(const b of row.querySelectorAll('button')) b.disabled = !isSupported();
     }
 }
 
 function onDeviceAction(kind, action) {
-    if(action === 'register') return registerDevice(kind);
+    document.querySelector(`.device-row[data-kind="${kind}"] .more`)?.removeAttribute('open');
+    if(action === 'register' || action === 'replace') return registerDevice(kind);
     if(action === 'unregister') return unregisterKind(kind);
     if(connections[kind].status === 'disconnected') return connectSaved(kind);
     connections[kind].disconnect();
@@ -720,6 +733,7 @@ function renderWheelSizes() {
 function setBias(next) {
     bias = Math.min(Math.max(next, bounds.bias[0]), bounds.bias[1]);
     $('bias').textContent = `${100 + bias}%`;
+    $('bias').closest('.bias').toggleAttribute('data-changed', bias !== 0);
     if(workout) {
         chart.draw(workout, {ftp: settings.ftp, bias});
         if(player && player.state !== 'finished') {
@@ -872,7 +886,10 @@ function trainerReady() {
         message = `${saved.name} is not connected. Connect it, then press Start.`;
         actions.unshift([`Connect ${saved.name}`, () => connectSaved('trainer')]);
     } else {
-        message = 'No trainer is registered. Register it in Settings, then press Start.';
+        if(!isSupported()) return false;
+        banner('no-trainer', 'info', 'Pair your trainer first: turn it on, pedal a few strokes to wake it, then pick it in Chrome’s list.',
+            [['Pair trainer', () => registerDevice('trainer'), {primary: true}]]);
+        return false;
     }
     banner('no-trainer', 'error', message, actions);
     return false;
@@ -889,6 +906,47 @@ function onStartClick() {
     pausedForPedaling = false;
     if(player.state === 'running') return player.pause();
     if(player.state === 'paused') return player.start();
+}
+
+// Skip asks for a second tap within a few seconds: a thumb that slips mid interval shouldn't lose it
+const skipArmMs = 3000;
+let skipTimer;
+
+function disarmSkip() {
+    clearTimeout(skipTimer);
+    skipTimer = undefined;
+    const button = $('btn-skip');
+    if(!button.hasAttribute('data-armed')) return;
+    button.removeAttribute('data-armed');
+    button.textContent = 'Skip interval';
+}
+
+function onSkipClick() {
+    if(!riding()) return;
+    if(skipTimer) {
+        disarmSkip();
+        player.skip();
+        return;
+    }
+    const button = $('btn-skip');
+    button.setAttribute('data-armed', '');
+    button.textContent = 'Tap again to skip';
+    skipTimer = setTimeout(disarmSkip, skipArmMs);
+}
+
+// keys for a laptop on the bars: Space starts, pauses and resumes, the arrows change the intensity
+function onKey(event) {
+    if(event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
+    if(router?.current !== 'ride' || $('summary').open) return;
+    // a focused control already answers Space and the arrows itself
+    if(event.target.closest?.('button, input, select, textarea, a, summary, [contenteditable]')) return;
+    if(event.code === 'Space' && !event.repeat) {
+        event.preventDefault();
+        if(!$('btn-start').disabled) onStartClick();
+    } else if(event.code === 'ArrowUp' || event.code === 'ArrowDown') {
+        event.preventDefault();
+        setBias(bias + (event.code === 'ArrowUp' ? 5 : -5));
+    }
 }
 
 // End opens the summary dialog with the ride so far: save it, discard it or keep riding.
@@ -945,6 +1003,39 @@ function showSummary(ride, mode) {
         ['Energy', round(s.totalCalories, 'kJ')],
     ];
     $('summary-stats').replaceChildren(...rows.flatMap(([k, v]) => [el('dt', {}, k), el('dd', {}, v)]));
+
+    // what the ride was worth: normalized power, intensity factor and TSS, as in the .FIT
+    const key = [
+        ['NP', Number.isFinite(s.normalizedPower) ? `${Math.round(s.normalizedPower)}` : undefined, 'W'],
+        ['IF', Number.isFinite(s.intensityFactor) ? s.intensityFactor.toFixed(2) : undefined, ''],
+        ['TSS', Number.isFinite(s.trainingStressScore) ? `${Math.round(s.trainingStressScore)}` : undefined, ''],
+    ].filter(([, v]) => v !== undefined);
+    $('summary-key').replaceChildren(...key.map(([k, v, unit]) => el('div', {}, [
+        el('dt', {}, k), el('dd', {}, unit ? `${v} ${unit}` : v)])));
+    $('summary-key').hidden = key.length === 0;
+
+    // the workout's profile, with the part not ridden dimmed
+    const ridden = workout && workout.name === ride.workoutName && player ? player.elapsed : undefined;
+    if(ridden !== undefined) {
+        const profile = drawProfile(workout, ride.ftp ?? settings.ftp);
+        const box = profile.viewBox.baseVal;
+        if(ridden < workout.duration) {
+            const rest = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            for(const [k, v] of Object.entries({class: 'done', x: ridden, y: 0, width: workout.duration - ridden, height: box.height})) {
+                rest.setAttribute(k, String(v));
+            }
+            profile.append(rest);
+        }
+        $('summary-profile').replaceChildren(profile);
+        $('summary-progress').textContent = ridden >= workout.duration ? 'The whole workout, done.'
+            : `${formatDuration(ridden)} of ${formatDuration(workout.duration)} ridden.`;
+    } else {
+        $('summary-profile').replaceChildren();
+        $('summary-progress').textContent = '';
+    }
+    $('summary-profile').hidden = ridden === undefined;
+
+    $('summary-saved').removeAttribute('data-ok');
     $('summary-saved').textContent = ending ? 'The ride is paused.' : 'Saving to history…';
     if(!$('summary').open) $('summary').showModal();
 }
@@ -989,6 +1080,7 @@ async function finishRide(ride) {
         await saveRide(ride);
         clearSavedRide();
         $('summary-saved').textContent = store.persistent ? 'Saved to history.' : 'Kept in history until you close the page.';
+        $('summary-saved').toggleAttribute('data-ok', store.persistent);
         // Save ride was a tap, so Google's sign-in window may open
         if(sync.state) syncNow(true);
     } catch(error) {
@@ -1418,7 +1510,7 @@ function renderDrive() {
         const message = `${intro} Drive has ${counts(sync.remote.data)}; this device has ${sync.localCounts}.`
             + (sync.message ? ` ${sync.message}` : '');
         banner('drive', 'warn', message, [
-            ['Merge both', () => resolveConflict('merge')],
+            ['Merge both', () => resolveConflict('merge'), {primary: true}],
             ['Use Drive’s copy', () => {
                 if(confirm('Replace the workouts, rides and settings on this device with Drive’s?')) resolveConflict('drive');
             }],
@@ -1440,8 +1532,8 @@ function renderDrive() {
 function banner(id, kind, text, actions = []) {
     const node = el('div', {class: `banner ${kind}`, 'data-id': id}, [
         el('p', {}, text),
-        el('div', {class: 'actions'}, actions.map(([label, onClick]) => {
-            const button = el('button', {type: 'button'}, label);
+        el('div', {class: 'actions'}, actions.map(([label, onClick, {primary = false} = {}]) => {
+            const button = el('button', {type: 'button', ...(primary ? {class: 'primary'} : {})}, label);
             button.addEventListener('click', onClick);
             return button;
         })),
@@ -1524,6 +1616,10 @@ function render() {
         $('tile-interval').classList.remove('countdown');
     }
     text('v-elapsed', formatDuration(elapsed));
+    for(const id of ['v-interval', 'v-elapsed']) {
+        const long = $(id).textContent.length > 5;
+        if(long !== $(id).hasAttribute('data-long')) $(id).toggleAttribute('data-long', long);
+    }
     const message = waitingToStart ? 'Start pedaling to begin'
         : pausedForPedaling && state === 'paused' ? 'Paused. Pedal to resume'
         : workout && (state === 'running' || state === 'paused') ? textAt(workout.texts, elapsed) : undefined;
@@ -1536,6 +1632,7 @@ function render() {
     $('btn-start').classList.toggle('primary', state !== 'running' && !waitingToStart);
     $('btn-start').disabled = !workout;
     $('btn-skip').disabled = !riding;
+    if(!riding) disarmSkip();
     $('btn-end').disabled = !riding;
     $('file').disabled = riding || waitingToStart || !store;
     $('btn-backup').disabled = !store;
@@ -1620,7 +1717,8 @@ function init() {
     $('btn-drive-sync').addEventListener('click', () => syncNow(true));
     $('btn-drive-disconnect').addEventListener('click', disconnectDrive);
     $('btn-start').addEventListener('click', onStartClick);
-    $('btn-skip').addEventListener('click', () => player?.skip());
+    $('btn-skip').addEventListener('click', onSkipClick);
+    document.addEventListener('keydown', onKey);
     $('btn-end').addEventListener('click', onEndClick);
     $('bias-down').addEventListener('click', () => setBias(bias - 5));
     $('bias-up').addEventListener('click', () => setBias(bias + 5));

@@ -58,7 +58,7 @@ def run():
         page.fill("#ftp", "250")
         page.locator("#ftp").dispatch_event("change")
         for label in ("trainer", "heart rate", "speed/cadence"):
-            page.get_by_role("button", name=f"Register {label}", exact=True).click()
+            page.locator("#device-list").get_by_role("button", name=f"Pair {label}", exact=True).click()
         for kind in ("trainer", "hr", "csc"):
             expect(page.locator(f"#dev-{kind}")).to_have_attribute("data-status", "connected")
 
